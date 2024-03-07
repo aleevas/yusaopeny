@@ -396,7 +396,7 @@
                 "Issue #3376766: Incorrect path if Drupal is installed in subfolder": "https://git.drupalcode.org/project/responsive_favicons/-/merge_requests/6.diff"
             },
           "drupal/editor_advanced_link": {
-                "Issue #3423208: Integrate a functionality of the CKEditor Bootstrap Buttons module": "https://git.drupalcode.org/project/editor_advanced_link/-/merge_requests/19.diff"
+                "Issue #3423208: Integrate a functionality of the CKEditor Bootstrap Buttons module": "./patches/editor_advanced_link/3423208_add_bb_functionality.patch"
             }
         }
     },

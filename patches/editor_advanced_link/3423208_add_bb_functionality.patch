@@ -1,0 +1,864 @@
+From 4f82f539d24ecde4cd41c30c321d3ee4224f3690 Mon Sep 17 00:00:00 2001
+From: Alexey <aleevas>
+Date: Thu, 22 Feb 2024 14:29:09 +0100
+Subject: [PATCH 1/2] #3423208: Integrate a functionality of the CKEditor
+ Bootstrap Buttons module
+
+---
+ editor_advanced_link.ckeditor5.yml            |   6 +-
+ editor_advanced_link.libraries.yml            |   7 +
+ editor_advanced_link.module                   |  41 ++
+ js/build/editorAdvancedLink.js                |   2 +-
+ .../editorAdvancedLink/src/css/bbuttons.css   |   4 +
+ .../src/editoradvancedlinkui.js               |  38 +-
+ .../editorAdvancedLink/src/utils.js           |  18 +
+ js/dist/bootstrap/bootstrap-buttons.css       | 503 ++++++++++++++++++
+ src/Plugin/CKEditor5Plugin/AdvancedLink.php   |  11 +-
+ 9 files changed, 624 insertions(+), 6 deletions(-)
+ create mode 100644 js/ckeditor5_plugins/editorAdvancedLink/src/css/bbuttons.css
+ create mode 100644 js/dist/bootstrap/bootstrap-buttons.css
+
+diff --git a/editor_advanced_link.ckeditor5.yml b/editor_advanced_link.ckeditor5.yml
+index b2b177c..0620ecd 100644
+--- a/editor_advanced_link.ckeditor5.yml
++++ b/editor_advanced_link.ckeditor5.yml
+@@ -13,12 +13,16 @@ editor_advanced_link_link:
+           - id
+           - target
+           - rel
++          - bootstrap-button
++          - data-button-style
++          - data-button-color
++          - data-button-size
+   drupal:
+     label: Advanced links
+     class: Drupal\editor_advanced_link\Plugin\CKEditor5Plugin\AdvancedLink
+     library: editor_advanced_link/ckeditor5
+     elements:
+-      - <a aria-label title class id target="_blank" rel>
++      - <a aria-label title class id target="_blank" rel data-button-style data-button-color data-button-size>
+     conditions:
+       plugins:
+         - ckeditor5_link
+diff --git a/editor_advanced_link.libraries.yml b/editor_advanced_link.libraries.yml
+index 4aa5764..e986329 100644
+--- a/editor_advanced_link.libraries.yml
++++ b/editor_advanced_link.libraries.yml
+@@ -16,3 +16,10 @@ ckeditor5:
+     - core/drupal
+     - ckeditor5/ckeditor5
+     - ckeditor5/ckeditor5.link
++    - editor_advanced_link/bootstrap-buttons
++
++bootstrap-buttons:
++  version: '5.3'
++  css:
++    theme:
++      js/dist/bootstrap/bootstrap-buttons.css: { }
+diff --git a/editor_advanced_link.module b/editor_advanced_link.module
+index 0404245..992a8e7 100644
+--- a/editor_advanced_link.module
++++ b/editor_advanced_link.module
+@@ -6,8 +6,42 @@
+  */
+
+ use Drupal\Core\Form\FormStateInterface;
++use Drupal\Core\Routing\RouteMatchInterface;
++use Drupal\Core\Url;
+ use Drupal\editor\Entity\Editor;
+
++/**
++ * Implements hook_help().
++ */
++function editor_advanced_link_help($route_name, RouteMatchInterface $route_match) {
++  switch ($route_name) {
++    case 'help.page.editor_advanced_link':
++      $output = '';
++      $output .= '<h3>' . t('CKEditor Advanced Link') . '</h3>';
++      $output .= '<p>' . t('The module adds additional attributes to the Ckeditor 5 core link plugin: title, class, id, target, area etc.') . '</p>';
++      $output .= '<h3>' . t('Uses') . '</h3>';
++      $output .= '<dl>';
++      $output .= '<dt>' . t('Settings') . '</dt>';
++      $output .= '<dd>' . t('After enabled module in the <a target="_blank" href=":text-formats">text formats</a> in CKEditor 5 plugin settings section, you can find a new tab <b>Advanced links</b>.', [':text-formats' => Url::fromRoute('filter.admin_overview')->toString()]) . '</dd>';
++      $output .= '<dt>' . t('Usage') . '</dt>';
++      $output .= '<dd>' . t('Enable the attribute you want to add to the Ckeditor 5 core Link plugin.') . '</dd>';
++      $output .= '<dd>' . t('To remove additional attributes, you can uncheck this attribute in this form.') . '</dd>';
++      $output .= '</dl>';
++      $output .= '<h3>' . t('Styling link with Bootstrap Buttons styles') . '</h3>';
++      $output .= '<dl>';
++      $output .= '<dt>' . t('Check the <b>Bootstrap Button</b> option in <b>Advanced links</b> section') . '</dt>';
++      $output .= '<dt>' . t('Save the text formats edit form.') . '</dt>';
++      $output .= '<dt>' . t('Go to the field where you want to add the "Bootstrap Button" styled link. Click the link button in the WYSIWYG toolbar.') . '</dt>';
++      $output .= '<dt>' . t('You can find a new collapsible section "Bootstrap Button"') . '</dt>';
++      $output .= '<dt>' . t('There are 3 options: Color, Size, Style') . '</dt>';
++      $output .= '<dt>' . t('You can find the values for each field on <a target="_blank" href=":bootstrap-button">this</a> page ', [':bootstrap-button' => Url::fromUri('https://getbootstrap.com/docs/5.2/components/buttons/')->toString()]) . '</dt>';
++      $output .= '<dt>' . t('Please note that you should enter values without <b>without</b> the prefix "btn-". It will be added automatically. For example: Color - "danger", Size - "sm", Style - "outline"') . '</dt>';
++      $output .= '</dl>';
++      return $output;
++    default:
++  }
++}
++
+ /**
+  * Implements hook_form_FORM_ID_alter().
+  *
+@@ -170,3 +204,10 @@ function _editor_advanced_link_attributes_validate(array &$form, FormStateInterf
+     }
+   }
+ }
++
++/**
++ * Implements hook_preprocess_html().
++ */
++function editor_advanced_link_preprocess_html(&$variables) {
++  $variables['#attached']['library'][] = 'editor_advanced_link/bootstrap-5-js';
++}
+diff --git a/js/build/editorAdvancedLink.js b/js/build/editorAdvancedLink.js
+index 78103a0..2ba9350 100644
+--- a/js/build/editorAdvancedLink.js
++++ b/js/build/editorAdvancedLink.js
+@@ -1 +1 @@
+-!function(e,t){"object"==typeof exports&&"object"==typeof module?module.exports=t():"function"==typeof define&&define.amd?define([],t):"object"==typeof exports?exports.CKEditor5=t():(e.CKEditor5=e.CKEditor5||{},e.CKEditor5.editorAdvancedLink=t())}(self,(()=>(()=>{var e={"./node_modules/css-loader/dist/cjs.js!./node_modules/postcss-loader/dist/cjs.js??ruleSet[1].rules[0].use[2]!./js/ckeditor5_plugins/editorAdvancedLink/src/details/details.css":(e,t,r)=>{"use strict";r.d(t,{Z:()=>a});var i=r("./node_modules/css-loader/dist/runtime/noSourceMaps.js"),s=r.n(i),n=r("./node_modules/css-loader/dist/runtime/api.js"),o=r.n(n)()(s());o.push([e.id,".ck.ck-form__details>summary{cursor:pointer}.ck.ck-form__details>summary:focus-visible{border:var(--ck-focus-ring);box-shadow:var(--ck-focus-outer-shadow),0 0}",""]);const a=o},"./node_modules/css-loader/dist/runtime/api.js":e=>{"use strict";e.exports=function(e){var t=[];return t.toString=function(){return this.map((function(t){var r="",i=void 0!==t[5];return t[4]&&(r+="@supports (".concat(t[4],") {")),t[2]&&(r+="@media ".concat(t[2]," {")),i&&(r+="@layer".concat(t[5].length>0?" ".concat(t[5]):""," {")),r+=e(t),i&&(r+="}"),t[2]&&(r+="}"),t[4]&&(r+="}"),r})).join("")},t.i=function(e,r,i,s,n){"string"==typeof e&&(e=[[null,e,void 0]]);var o={};if(i)for(var a=0;a<this.length;a++){var l=this[a][0];null!=l&&(o[l]=!0)}for(var c=0;c<e.length;c++){var d=[].concat(e[c]);i&&o[d[0]]||(void 0!==n&&(void 0===d[5]||(d[1]="@layer".concat(d[5].length>0?" ".concat(d[5]):""," {").concat(d[1],"}")),d[5]=n),r&&(d[2]?(d[1]="@media ".concat(d[2]," {").concat(d[1],"}"),d[2]=r):d[2]=r),s&&(d[4]?(d[1]="@supports (".concat(d[4],") {").concat(d[1],"}"),d[4]=s):d[4]="".concat(s)),t.push(d))}},t}},"./node_modules/css-loader/dist/runtime/noSourceMaps.js":e=>{"use strict";e.exports=function(e){return e[1]}},"./node_modules/style-loader/dist/runtime/injectStylesIntoStyleTag.js":(e,t,r)=>{"use strict";var i,s=function(){return void 0===i&&(i=Boolean(window&&document&&document.all&&!window.atob)),i},n=function(){var e={};return function(t){if(void 0===e[t]){var r=document.querySelector(t);if(window.HTMLIFrameElement&&r instanceof window.HTMLIFrameElement)try{r=r.contentDocument.head}catch(e){r=null}e[t]=r}return e[t]}}(),o=[];function a(e){for(var t=-1,r=0;r<o.length;r++)if(o[r].identifier===e){t=r;break}return t}function l(e,t){for(var r={},i=[],s=0;s<e.length;s++){var n=e[s],l=t.base?n[0]+t.base:n[0],c=r[l]||0,d="".concat(l," ").concat(c);r[l]=c+1;var u=a(d),m={css:n[1],media:n[2],sourceMap:n[3]};-1!==u?(o[u].references++,o[u].updater(m)):o.push({identifier:d,updater:g(m,t),references:1}),i.push(d)}return i}function c(e){var t=document.createElement("style"),i=e.attributes||{};if(void 0===i.nonce){var s=r.nc;s&&(i.nonce=s)}if(Object.keys(i).forEach((function(e){t.setAttribute(e,i[e])})),"function"==typeof e.insert)e.insert(t);else{var o=n(e.insert||"head");if(!o)throw new Error("Couldn't find a style target. This probably means that the value for the 'insert' parameter is invalid.");o.appendChild(t)}return t}var d,u=(d=[],function(e,t){return d[e]=t,d.filter(Boolean).join("\n")});function m(e,t,r,i){var s=r?"":i.media?"@media ".concat(i.media," {").concat(i.css,"}"):i.css;if(e.styleSheet)e.styleSheet.cssText=u(t,s);else{var n=document.createTextNode(s),o=e.childNodes;o[t]&&e.removeChild(o[t]),o.length?e.insertBefore(n,o[t]):e.appendChild(n)}}function h(e,t,r){var i=r.css,s=r.media,n=r.sourceMap;if(s?e.setAttribute("media",s):e.removeAttribute("media"),n&&"undefined"!=typeof btoa&&(i+="\n/*# sourceMappingURL=data:application/json;base64,".concat(btoa(unescape(encodeURIComponent(JSON.stringify(n))))," */")),e.styleSheet)e.styleSheet.cssText=i;else{for(;e.firstChild;)e.removeChild(e.firstChild);e.appendChild(document.createTextNode(i))}}var f=null,p=0;function g(e,t){var r,i,s;if(t.singleton){var n=p++;r=f||(f=c(t)),i=m.bind(null,r,n,!1),s=m.bind(null,r,n,!0)}else r=c(t),i=h.bind(null,r,t),s=function(){!function(e){if(null===e.parentNode)return!1;e.parentNode.removeChild(e)}(r)};return i(e),function(t){if(t){if(t.css===e.css&&t.media===e.media&&t.sourceMap===e.sourceMap)return;i(e=t)}else s()}}e.exports=function(e,t){(t=t||{}).singleton||"boolean"==typeof t.singleton||(t.singleton=s());var r=l(e=e||[],t);return function(e){if(e=e||[],"[object Array]"===Object.prototype.toString.call(e)){for(var i=0;i<r.length;i++){var s=a(r[i]);o[s].references--}for(var n=l(e,t),c=0;c<r.length;c++){var d=a(r[c]);0===o[d].references&&(o[d].updater(),o.splice(d,1))}r=n}}}},"ckeditor5/src/core.js":(e,t,r)=>{e.exports=r("dll-reference CKEditor5.dll")("./src/core.js")},"ckeditor5/src/typing.js":(e,t,r)=>{e.exports=r("dll-reference CKEditor5.dll")("./src/typing.js")},"ckeditor5/src/ui.js":(e,t,r)=>{e.exports=r("dll-reference CKEditor5.dll")("./src/ui.js")},"dll-reference CKEditor5.dll":e=>{"use strict";e.exports=CKEditor5.dll}},t={};function r(i){var s=t[i];if(void 0!==s)return s.exports;var n=t[i]={id:i,exports:{}};return e[i](n,n.exports,r),n.exports}r.n=e=>{var t=e&&e.__esModule?()=>e.default:()=>e;return r.d(t,{a:t}),t},r.d=(e,t)=>{for(var i in t)r.o(t,i)&&!r.o(e,i)&&Object.defineProperty(e,i,{enumerable:!0,get:t[i]})},r.o=(e,t)=>Object.prototype.hasOwnProperty.call(e,t),r.nc=void 0;var i={};return(()=>{"use strict";r.d(i,{default:()=>p});var e=r("ckeditor5/src/core.js"),t=r("ckeditor5/src/typing.js");const s={linkTitle:{label:Drupal.t("Title"),viewAttribute:"title"},linkAriaLabel:{label:Drupal.t("ARIA label"),viewAttribute:"aria-label",group:"advanced"},linkClass:{label:Drupal.t("CSS classes"),viewAttribute:"class",group:"advanced"},linkId:{label:Drupal.t("ID"),viewAttribute:"id",group:"advanced"},linkRel:{label:Drupal.t("Link relationship"),viewAttribute:"rel",group:"advanced"}},n={advanced:{label:Drupal.t("Advanced")}};class o extends e.Plugin{static get pluginName(){return"EditorAdvancedLinkEditing"}init(){const e=this.editor.config.get("editorAdvancedLink");if(!e.options)return void(this.enabledModelNames=[]);const t=Object.values(e.options);this.enabledModelNames=Object.keys(s).filter((e=>t.includes(s[e].viewAttribute))),this.enabledModelNames.forEach((e=>{this._allowAndConvertExtraAttribute(e,s[e].viewAttribute),this._removeExtraAttributeOnUnlinkCommandExecute(e),this._refreshExtraAttributeValue(e)})),this._addExtraAttributeOnLinkCommandExecute(Object.keys(s))}_allowAndConvertExtraAttribute(e,t){const{editor:r}=this;r.model.schema.extend("$text",{allowAttributes:e}),r.conversion.for("downcast").attributeToElement({model:e,view:(e,{writer:r})=>{const i=r.createAttributeElement("a",{[t]:e},{priority:5});return r.setCustomProperty("link",!0,i),i}}),r.conversion.for("upcast").elementToAttribute({view:{name:"a",attributes:{[t]:!0}},model:{key:e,value:e=>e.getAttribute(t)}})}_addExtraAttributeOnLinkCommandExecute(e){const{editor:t}=this,r=t.commands.get("link");let i=!1;r.on("execute",((r,s)=>{if(s.length<3)return;if(i)return void(i=!1);r.stop(),i=!0;const n=s[s.length-1],{model:o}=this.editor,{selection:a}=o.document;o.change((r=>{t.execute("link",...s);const i=a.getFirstPosition();e.forEach((e=>{if(a.isCollapsed){const t=i.textNode||i.nodeBefore;n[e]?r.setAttribute(e,n[e],r.createRangeOn(t)):r.removeAttribute(e,r.createRangeOn(t)),r.removeSelectionAttribute(e)}else{const t=o.schema.getValidRanges(a.getRanges(),e);for(const i of t)n[e]?r.setAttribute(e,n[e],i):r.removeAttribute(e,i)}}))}))}),{priority:"high"})}_removeExtraAttributeOnUnlinkCommandExecute(e){const{editor:r}=this,i=r.commands.get("unlink"),{model:s}=this.editor,{selection:n}=s.document;let o=!1;i.on("execute",(i=>{o||(i.stop(),s.change((()=>{o=!0,r.execute("unlink"),o=!1,s.change((r=>{let i;i=n.isCollapsed?[(0,t.findAttributeRange)(n.getFirstPosition(),e,n.getAttribute(e),s)]:s.schema.getValidRanges(n.getRanges(),e);for(const t of i)r.removeAttribute(e,t)}))})))}),{priority:"high"})}_refreshExtraAttributeValue(e){const{editor:t}=this,r=t.commands.get("link"),{model:i}=this.editor,{selection:s}=i.document;r.set(e,null),i.document.on("change",(()=>{r[e]=s.getAttribute(e)}))}}var a=r("ckeditor5/src/ui.js"),l=r("./node_modules/style-loader/dist/runtime/injectStylesIntoStyleTag.js"),c=r.n(l),d=r("./node_modules/css-loader/dist/cjs.js!./node_modules/postcss-loader/dist/cjs.js??ruleSet[1].rules[0].use[2]!./js/ckeditor5_plugins/editorAdvancedLink/src/details/details.css"),u={injectType:"singletonStyleTag",attributes:{"data-cke":!0},insert:"head",singleton:!0};c()(d.Z,u);d.Z.locals;class m extends a.View{constructor(e,t={}){super(e);const r=this.bindTemplate;this.set("isFocused",!1),this.set("label",t.label||""),this.set("class",t.class||null),this.children=this.createCollection(),this.setTemplate({tag:"details",attributes:{class:["ck","ck-form__details",r.if("isFocused","ck-form__details--focused"),r.to("class")]},children:this.children}),this.summary=new a.View(e),this.summary.setTemplate({tag:"summary",attributes:{class:["ck","ck-form__details__summary"]},children:[{text:r.to("label")}]}),this.children.add(this.summary)}render(){super.render(),this.element.addEventListener("toggle",this.onToggle.bind(this))}focus(){this.summary.element.focus()}onToggle(e){if(e.target.open){const e=this.parent._focusables.getIndex(this);Object.values(this.children._items).slice(1).reverse().forEach((t=>{this.parent._focusables.add(t,e+1),this.parent.focusTracker.add(t.element)}))}else Object.values(this.children._items).slice(1).forEach((e=>{this.parent._focusables.remove(e),this.parent.focusTracker.remove(e.element)}))}}class h extends e.Plugin{init(){this.groups={},this.editor.plugins.get("LinkUI")._createViews&&this.editor.plugins.get("LinkUI")._createViews(),this._changeFormToVertical(),this._addExtraFormFields()}_addExtraFormFields(){const{editor:e}=this;e.plugins.get("ContextualBalloon").on("set:visibleView",((t,r,i,n)=>{const o=e.plugins.get("LinkUI").formView;if(i===n||i!==o)return;const{enabledModelNames:a}=e.plugins.get("EditorAdvancedLinkEditing");a.reverse().forEach((e=>{this._createExtraFormField(e,s[e])})),this._handleExtraFormFieldSubmit(a),this._addGroupsToFormView(),this._moveTargetDecoratorToAdvancedGroup()}))}_changeFormToVertical(){this.editor.plugins.get("LinkUI").formView.extendTemplate({attributes:{class:["ck-vertical-form","ck-link-form_layout-vertical"]}})}_createExtraFormField(e,t){const{editor:r}=this,{locale:i}=r,s=r.plugins.get("LinkUI").formView,n=r.commands.get("link");if(void 0===s[e]){const r=t.group?this._getGroup(t.group):s,o=new a.LabeledFieldView(i,a.createLabeledInputText);o.label=t.label,r.children.add(o,1),t.group||(s._focusables.add(o,1),s.focusTracker.add(o.element)),s[e]=o,s[e].fieldView.bind("value").to(n,e),s[e].fieldView.element.value=n[e]||""}}_addGroupsToFormView(){if(0===Object.entries(this.groups).length)return;const{editor:e}=this,t=e.plugins.get("LinkUI").formView;Object.values(this.groups).reverse().forEach((e=>{e.added||(t.children.add(e,2),e.parent=t,t._focusables.add(e,2),t.focusTracker.add(e.element),e.added=!0)}));[t.children.find((e=>e.template.attributes.class.indexOf("ck-button-save")>-1)),t.children.find((e=>e.template.attributes.class.indexOf("ck-button-cancel")>-1))].forEach(((e,r)=>{t.children.remove(e),t._focusables.remove(e),t.focusTracker.remove(e.element),t.children.add(e,3+r),t._focusables.add(e,3+r),t.focusTracker.add(e.element)}))}_getGroup(e){if(!this.groups[e]){const{editor:t}=this,{locale:r}=t;this.groups[e]=new m(r,{label:n[e].label})}return this.groups[e]}_moveTargetDecoratorToAdvancedGroup(){const{editor:e}=this,t=e.plugins.get("LinkUI").formView;t.targetMoved||(t._manualDecoratorSwitches._items.forEach((e=>{e.label===Drupal.t("Open in new window")&&this._getGroup("advanced").children.add(e)})),t.targetMoved=!0)}_handleExtraFormFieldSubmit(e){const{editor:t}=this,r=t.plugins.get("LinkUI").formView,i=t.commands.get("link");this.listenTo(r,"submit",(()=>{const t=e.reduce(((e,t)=>(e[t]=r[t].fieldView.element.value,e)),{});i.once("execute",((e,r)=>{if(r.length<3)r.push(t);else{if(3!==r.length)throw Error("The link command has more than 3 arguments.");Object.assign(r[2],t)}}),{priority:"highest"})}),{priority:"high"})}}class f extends e.Plugin{static get requires(){return[o,h]}static get pluginName(){return"EditorAdvancedLink"}}const p={EditorAdvancedLink:f}})(),i=i.default})()));
+\ No newline at end of file
++!function(e,t){"object"==typeof exports&&"object"==typeof module?module.exports=t():"function"==typeof define&&define.amd?define([],t):"object"==typeof exports?exports.CKEditor5=t():(e.CKEditor5=e.CKEditor5||{},e.CKEditor5.editorAdvancedLink=t())}(self,(()=>(()=>{var e={"./node_modules/css-loader/dist/cjs.js!./node_modules/postcss-loader/dist/cjs.js??ruleSet[1].rules[0].use[2]!./js/ckeditor5_plugins/editorAdvancedLink/src/css/bbuttons.css":(e,t,s)=>{"use strict";s.d(t,{Z:()=>a});var o=s("./node_modules/css-loader/dist/runtime/noSourceMaps.js"),r=s.n(o),i=s("./node_modules/css-loader/dist/runtime/api.js"),n=s.n(i)()(r());n.push([e.id,".ck.ck-link-form.with-bootstrap-buttons{min-width:280px}",""]);const a=n},"./node_modules/css-loader/dist/cjs.js!./node_modules/postcss-loader/dist/cjs.js??ruleSet[1].rules[0].use[2]!./js/ckeditor5_plugins/editorAdvancedLink/src/details/details.css":(e,t,s)=>{"use strict";s.d(t,{Z:()=>a});var o=s("./node_modules/css-loader/dist/runtime/noSourceMaps.js"),r=s.n(o),i=s("./node_modules/css-loader/dist/runtime/api.js"),n=s.n(i)()(r());n.push([e.id,".ck.ck-form__details>summary{cursor:pointer}.ck.ck-form__details>summary:focus-visible{border:var(--ck-focus-ring);box-shadow:var(--ck-focus-outer-shadow),0 0}",""]);const a=n},"./node_modules/css-loader/dist/runtime/api.js":e=>{"use strict";e.exports=function(e){var t=[];return t.toString=function(){return this.map((function(t){var s="",o=void 0!==t[5];return t[4]&&(s+="@supports (".concat(t[4],") {")),t[2]&&(s+="@media ".concat(t[2]," {")),o&&(s+="@layer".concat(t[5].length>0?" ".concat(t[5]):""," {")),s+=e(t),o&&(s+="}"),t[2]&&(s+="}"),t[4]&&(s+="}"),s})).join("")},t.i=function(e,s,o,r,i){"string"==typeof e&&(e=[[null,e,void 0]]);var n={};if(o)for(var a=0;a<this.length;a++){var l=this[a][0];null!=l&&(n[l]=!0)}for(var d=0;d<e.length;d++){var c=[].concat(e[d]);o&&n[c[0]]||(void 0!==i&&(void 0===c[5]||(c[1]="@layer".concat(c[5].length>0?" ".concat(c[5]):""," {").concat(c[1],"}")),c[5]=i),s&&(c[2]?(c[1]="@media ".concat(c[2]," {").concat(c[1],"}"),c[2]=s):c[2]=s),r&&(c[4]?(c[1]="@supports (".concat(c[4],") {").concat(c[1],"}"),c[4]=r):c[4]="".concat(r)),t.push(c))}},t}},"./node_modules/css-loader/dist/runtime/noSourceMaps.js":e=>{"use strict";e.exports=function(e){return e[1]}},"./node_modules/style-loader/dist/runtime/injectStylesIntoStyleTag.js":(e,t,s)=>{"use strict";var o,r=function(){return void 0===o&&(o=Boolean(window&&document&&document.all&&!window.atob)),o},i=function(){var e={};return function(t){if(void 0===e[t]){var s=document.querySelector(t);if(window.HTMLIFrameElement&&s instanceof window.HTMLIFrameElement)try{s=s.contentDocument.head}catch(e){s=null}e[t]=s}return e[t]}}(),n=[];function a(e){for(var t=-1,s=0;s<n.length;s++)if(n[s].identifier===e){t=s;break}return t}function l(e,t){for(var s={},o=[],r=0;r<e.length;r++){var i=e[r],l=t.base?i[0]+t.base:i[0],d=s[l]||0,c="".concat(l," ").concat(d);s[l]=d+1;var u=a(c),m={css:i[1],media:i[2],sourceMap:i[3]};-1!==u?(n[u].references++,n[u].updater(m)):n.push({identifier:c,updater:f(m,t),references:1}),o.push(c)}return o}function d(e){var t=document.createElement("style"),o=e.attributes||{};if(void 0===o.nonce){var r=s.nc;r&&(o.nonce=r)}if(Object.keys(o).forEach((function(e){t.setAttribute(e,o[e])})),"function"==typeof e.insert)e.insert(t);else{var n=i(e.insert||"head");if(!n)throw new Error("Couldn't find a style target. This probably means that the value for the 'insert' parameter is invalid.");n.appendChild(t)}return t}var c,u=(c=[],function(e,t){return c[e]=t,c.filter(Boolean).join("\n")});function m(e,t,s,o){var r=s?"":o.media?"@media ".concat(o.media," {").concat(o.css,"}"):o.css;if(e.styleSheet)e.styleSheet.cssText=u(t,r);else{var i=document.createTextNode(r),n=e.childNodes;n[t]&&e.removeChild(n[t]),n.length?e.insertBefore(i,n[t]):e.appendChild(i)}}function p(e,t,s){var o=s.css,r=s.media,i=s.sourceMap;if(r?e.setAttribute("media",r):e.removeAttribute("media"),i&&"undefined"!=typeof btoa&&(o+="\n/*# sourceMappingURL=data:application/json;base64,".concat(btoa(unescape(encodeURIComponent(JSON.stringify(i))))," */")),e.styleSheet)e.styleSheet.cssText=o;else{for(;e.firstChild;)e.removeChild(e.firstChild);e.appendChild(document.createTextNode(o))}}var h=null,b=0;function f(e,t){var s,o,r;if(t.singleton){var i=b++;s=h||(h=d(t)),o=m.bind(null,s,i,!1),r=m.bind(null,s,i,!0)}else s=d(t),o=p.bind(null,s,t),r=function(){!function(e){if(null===e.parentNode)return!1;e.parentNode.removeChild(e)}(s)};return o(e),function(t){if(t){if(t.css===e.css&&t.media===e.media&&t.sourceMap===e.sourceMap)return;o(e=t)}else r()}}e.exports=function(e,t){(t=t||{}).singleton||"boolean"==typeof t.singleton||(t.singleton=r());var s=l(e=e||[],t);return function(e){if(e=e||[],"[object Array]"===Object.prototype.toString.call(e)){for(var o=0;o<s.length;o++){var r=a(s[o]);n[r].references--}for(var i=l(e,t),d=0;d<s.length;d++){var c=a(s[d]);0===n[c].references&&(n[c].updater(),n.splice(c,1))}s=i}}}},"ckeditor5/src/core.js":(e,t,s)=>{e.exports=s("dll-reference CKEditor5.dll")("./src/core.js")},"ckeditor5/src/typing.js":(e,t,s)=>{e.exports=s("dll-reference CKEditor5.dll")("./src/typing.js")},"ckeditor5/src/ui.js":(e,t,s)=>{e.exports=s("dll-reference CKEditor5.dll")("./src/ui.js")},"dll-reference CKEditor5.dll":e=>{"use strict";e.exports=CKEditor5.dll}},t={};function s(o){var r=t[o];if(void 0!==r)return r.exports;var i=t[o]={id:o,exports:{}};return e[o](i,i.exports,s),i.exports}s.n=e=>{var t=e&&e.__esModule?()=>e.default:()=>e;return s.d(t,{a:t}),t},s.d=(e,t)=>{for(var o in t)s.o(t,o)&&!s.o(e,o)&&Object.defineProperty(e,o,{enumerable:!0,get:t[o]})},s.o=(e,t)=>Object.prototype.hasOwnProperty.call(e,t),s.nc=void 0;var o={};return(()=>{"use strict";s.d(o,{default:()=>g});var e=s("ckeditor5/src/core.js"),t=s("ckeditor5/src/typing.js");const r={linkTitle:{label:Drupal.t("Title"),viewAttribute:"title"},linkAriaLabel:{label:Drupal.t("ARIA label"),viewAttribute:"aria-label",group:"advanced"},linkClass:{label:Drupal.t("CSS classes"),viewAttribute:"class",group:"advanced"},linkId:{label:Drupal.t("ID"),viewAttribute:"id",group:"advanced"},linkRel:{label:Drupal.t("Link relationship"),viewAttribute:"rel",group:"advanced"},buttonColor:{label:Drupal.t("Color (i.e. primary, secondary, success etc.)"),viewAttribute:"data-button-color",group:"bootstrapButton"},buttonSize:{label:Drupal.t("Size (sm, lg)"),viewAttribute:"data-button-size",group:"bootstrapButton"},buttonStyle:{label:Drupal.t("Style (default, outline)"),viewAttribute:"data-button-style",group:"bootstrapButton"}},i={advanced:{label:Drupal.t("Advanced")},bootstrapButton:{label:Drupal.t("Bootstrap Button")}};class n extends e.Plugin{static get pluginName(){return"EditorAdvancedLinkEditing"}init(){const e=this.editor.config.get("editorAdvancedLink");if(!e.options)return void(this.enabledModelNames=[]);const t=Object.values(e.options);this.enabledModelNames=Object.keys(r).filter((e=>t.includes(r[e].viewAttribute))),this.enabledModelNames.forEach((e=>{this._allowAndConvertExtraAttribute(e,r[e].viewAttribute),this._removeExtraAttributeOnUnlinkCommandExecute(e),this._refreshExtraAttributeValue(e)})),this._addExtraAttributeOnLinkCommandExecute(Object.keys(r))}_allowAndConvertExtraAttribute(e,t){const{editor:s}=this;s.model.schema.extend("$text",{allowAttributes:e}),s.conversion.for("downcast").attributeToElement({model:e,view:(e,{writer:s})=>{const o=s.createAttributeElement("a",{[t]:e},{priority:5});return s.setCustomProperty("link",!0,o),o}}),s.conversion.for("upcast").elementToAttribute({view:{name:"a",attributes:{[t]:!0}},model:{key:e,value:e=>e.getAttribute(t)}})}_addExtraAttributeOnLinkCommandExecute(e){const{editor:t}=this,s=t.commands.get("link");let o=!1;s.on("execute",((s,r)=>{if(r.length<3)return;if(o)return void(o=!1);s.stop(),o=!0;const i=r[r.length-1],{model:n}=this.editor,{selection:a}=n.document;n.change((s=>{t.execute("link",...r);const o=a.getFirstPosition();e.forEach((e=>{if(a.isCollapsed){const t=o.textNode||o.nodeBefore;i[e]?s.setAttribute(e,i[e],s.createRangeOn(t)):s.removeAttribute(e,s.createRangeOn(t)),s.removeSelectionAttribute(e)}else{const t=n.schema.getValidRanges(a.getRanges(),e);for(const o of t)i[e]?s.setAttribute(e,i[e],o):s.removeAttribute(e,o)}}))}))}),{priority:"high"})}_removeExtraAttributeOnUnlinkCommandExecute(e){const{editor:s}=this,o=s.commands.get("unlink"),{model:r}=this.editor,{selection:i}=r.document;let n=!1;o.on("execute",(o=>{n||(o.stop(),r.change((()=>{n=!0,s.execute("unlink"),n=!1,r.change((s=>{let o;o=i.isCollapsed?[(0,t.findAttributeRange)(i.getFirstPosition(),e,i.getAttribute(e),r)]:r.schema.getValidRanges(i.getRanges(),e);for(const t of o)s.removeAttribute(e,t)}))})))}),{priority:"high"})}_refreshExtraAttributeValue(e){const{editor:t}=this,s=t.commands.get("link"),{model:o}=this.editor,{selection:r}=o.document;s.set(e,null),o.document.on("change",(()=>{s[e]=r.getAttribute(e)}))}}var a=s("./node_modules/style-loader/dist/runtime/injectStylesIntoStyleTag.js"),l=s.n(a),d=s("./node_modules/css-loader/dist/cjs.js!./node_modules/postcss-loader/dist/cjs.js??ruleSet[1].rules[0].use[2]!./js/ckeditor5_plugins/editorAdvancedLink/src/css/bbuttons.css"),c={injectType:"singletonStyleTag",attributes:{"data-cke":!0},insert:"head",singleton:!0};l()(d.Z,c);d.Z.locals;var u=s("ckeditor5/src/ui.js"),m=s("./node_modules/css-loader/dist/cjs.js!./node_modules/postcss-loader/dist/cjs.js??ruleSet[1].rules[0].use[2]!./js/ckeditor5_plugins/editorAdvancedLink/src/details/details.css"),p={injectType:"singletonStyleTag",attributes:{"data-cke":!0},insert:"head",singleton:!0};l()(m.Z,p);m.Z.locals;class h extends u.View{constructor(e,t={}){super(e);const s=this.bindTemplate;this.set("isFocused",!1),this.set("label",t.label||""),this.set("class",t.class||null),this.children=this.createCollection(),this.setTemplate({tag:"details",attributes:{class:["ck","ck-form__details",s.if("isFocused","ck-form__details--focused"),s.to("class")]},children:this.children}),this.summary=new u.View(e),this.summary.setTemplate({tag:"summary",attributes:{class:["ck","ck-form__details__summary"]},children:[{text:s.to("label")}]}),this.children.add(this.summary)}render(){super.render(),this.element.addEventListener("toggle",this.onToggle.bind(this))}focus(){this.summary.element.focus()}onToggle(e){if(e.target.open){const e=this.parent._focusables.getIndex(this);Object.values(this.children._items).slice(1).reverse().forEach((t=>{this.parent._focusables.add(t,e+1),this.parent.focusTracker.add(t.element)}))}else Object.values(this.children._items).slice(1).forEach((e=>{this.parent._focusables.remove(e),this.parent.focusTracker.remove(e.element)}))}}class b extends e.Plugin{init(){this.groups={},this.bootstrapButtonEnabled=this._isBootstrapButtonsEnabled(),this.editor.plugins.get("LinkUI")._createViews&&this.editor.plugins.get("LinkUI")._createViews(),this._changeFormToVertical(),this._addExtraFormFields()}_addExtraFormFields(){const{editor:e}=this;e.plugins.get("ContextualBalloon").on("set:visibleView",((t,s,o,i)=>{const n=e.plugins.get("LinkUI").formView;if(o===i||o!==n)return;const{enabledModelNames:a}=e.plugins.get("EditorAdvancedLinkEditing");a.reverse().forEach((e=>{this._createExtraFormField(e,r[e])})),this._handleExtraFormFieldSubmit(a),this._addGroupsToFormView(),this._moveTargetDecoratorToAdvancedGroup()}))}_changeFormToVertical(){const e=this.editor.plugins.get("LinkUI").formView,t=this.bootstrapButtonEnabled?"with-bootstrap-buttons":"";e.extendTemplate({attributes:{class:["ck-vertical-form","ck-link-form_layout-vertical",t]}})}_createExtraFormField(e,t){const{editor:s}=this,{locale:o}=s,r=s.plugins.get("LinkUI").formView,i=s.commands.get("link");if(void 0===r[e]){const s=t.group?this._getGroup(t.group):r,n=new u.LabeledFieldView(o,u.createLabeledInputText);n.label=t.label,s.children.add(n,1),t.group||(r._focusables.add(n,1),r.focusTracker.add(n.element)),r[e]=n,r[e].fieldView.bind("value").to(i,e),r[e].fieldView.element.value=i[e]||""}}_addGroupsToFormView(){if(0===Object.entries(this.groups).length)return;const{editor:e}=this,t=e.plugins.get("LinkUI").formView;Object.values(this.groups).reverse().forEach((e=>{e.added||(t.children.add(e,2),e.parent=t,t._focusables.add(e,2),t.focusTracker.add(e.element),e.added=!0)}));const s=[t.children.find((e=>e.template.attributes.class.indexOf("ck-button-save")>-1)),t.children.find((e=>e.template.attributes.class.indexOf("ck-button-cancel")>-1))];let o=this.bootstrapButtonEnabled?4:3;s.forEach(((e,s)=>{t.children.remove(e),t._focusables.remove(e),t.focusTracker.remove(e.element),t.children.add(e,o+s),t._focusables.add(e,o+s),t.focusTracker.add(e.element)}))}_getGroup(e){if(!this.groups[e]){const{editor:t}=this,{locale:s}=t;this.groups[e]=new h(s,{label:i[e].label})}return this.groups[e]}_moveTargetDecoratorToAdvancedGroup(){const{editor:e}=this,t=e.plugins.get("LinkUI").formView;t.targetMoved||(t._manualDecoratorSwitches._items.forEach((e=>{e.label===Drupal.t("Open in new window")&&this._getGroup("advanced").children.add(e)})),t.targetMoved=!0)}_handleExtraFormFieldSubmit(e){const{editor:t}=this,s=t.plugins.get("LinkUI").formView,o=t.commands.get("link");this.listenTo(s,"submit",(()=>{const t=e.reduce(((e,t)=>(e[t]=s[t].fieldView.element.value,e)),{});this.bootstrapButtonEnabled&&(t.linkClass=this._addBootstrapButtonClasses(t)),o.once("execute",((e,s)=>{if(s.length<3)s.push(t);else{if(3!==s.length)throw Error("The link command has more than 3 arguments.");Object.assign(s[2],t)}}),{priority:"highest"})}),{priority:"high"})}_isBootstrapButtonsEnabled(){const e=this.editor.config.get("editorAdvancedLink");return!!Object.hasOwn(e,"options")&&Object.values(e.options).includes("bootstrap-button")}_addBootstrapButtonClasses(e){let t=e.linkClass.split(" ").filter((function(e){return!e.match(/(?:btn)(-)?(\w+)?/g)})).join(" "),s=`btn-${e.buttonColor}`,o=`btn-${e.buttonSize}`;return"outline"===e.buttonStyle.toLowerCase()&&(s=`btn-${e.buttonStyle}-${e.buttonColor}`),(t+" btn "+s+" "+o).toLowerCase()}}class f extends e.Plugin{static get requires(){return[n,b]}static get pluginName(){return"EditorAdvancedLink"}}const g={EditorAdvancedLink:f}})(),o=o.default})()));
+\ No newline at end of file
+diff --git a/js/ckeditor5_plugins/editorAdvancedLink/src/css/bbuttons.css b/js/ckeditor5_plugins/editorAdvancedLink/src/css/bbuttons.css
+new file mode 100644
+index 0000000..6658f14
+--- /dev/null
++++ b/js/ckeditor5_plugins/editorAdvancedLink/src/css/bbuttons.css
+@@ -0,0 +1,4 @@
++.ck.ck-link-form.with-bootstrap-buttons {
++  /*The list of classes can be long*/
++  min-width: 280px;
++}
+diff --git a/js/ckeditor5_plugins/editorAdvancedLink/src/editoradvancedlinkui.js b/js/ckeditor5_plugins/editorAdvancedLink/src/editoradvancedlinkui.js
+index 4dd1d0a..f896389 100644
+--- a/js/ckeditor5_plugins/editorAdvancedLink/src/editoradvancedlinkui.js
++++ b/js/ckeditor5_plugins/editorAdvancedLink/src/editoradvancedlinkui.js
+@@ -1,5 +1,6 @@
+ // eslint-disable-next-line import/no-extraneous-dependencies
+ import { Plugin } from 'ckeditor5/src/core';
++import './css/bbuttons.css';
+ // eslint-disable-next-line import/no-extraneous-dependencies
+ import { LabeledFieldView, createLabeledInputText } from 'ckeditor5/src/ui';
+ import { additionalFormElements, additionalFormGroups } from './utils';
+@@ -8,6 +9,7 @@ import DetailsView from './details/detailsview';
+ export default class EditorAdvancedLinkUi extends Plugin {
+   init() {
+     this.groups = {};
++    this.bootstrapButtonEnabled = this._isBootstrapButtonsEnabled();
+
+     // TRICKY: Work-around until the CKEditor team offers a better solution:
+     // force the ContextualBalloon to get instantiated early thanks to
+@@ -51,9 +53,10 @@ export default class EditorAdvancedLinkUi extends Plugin {
+
+   _changeFormToVertical() {
+     const linkFormView = this.editor.plugins.get('LinkUI').formView;
++    const bootstrapButtonClass = this.bootstrapButtonEnabled ? 'with-bootstrap-buttons' : ''
+     linkFormView.extendTemplate({
+       attributes: {
+-        class: ['ck-vertical-form', 'ck-link-form_layout-vertical'],
++        class: ['ck-vertical-form', 'ck-link-form_layout-vertical', bootstrapButtonClass],
+       },
+     });
+   }
+@@ -115,13 +118,14 @@ export default class EditorAdvancedLinkUi extends Plugin {
+       linkFormView.children.find((child) => child.template.attributes.class.indexOf('ck-button-save') > -1),
+       linkFormView.children.find((child) => child.template.attributes.class.indexOf('ck-button-cancel') > -1),
+     ];
++    let submitButtonsOffset = this.bootstrapButtonEnabled ? 4 : 3
+     buttons.forEach((item, i) => {
+       linkFormView.children.remove(item);
+       linkFormView._focusables.remove(item);
+       linkFormView.focusTracker.remove(item.element);
+
+-      linkFormView.children.add(item, 3 + i);
+-      linkFormView._focusables.add(item, 3 + i);
++      linkFormView.children.add(item, submitButtonsOffset + i);
++      linkFormView._focusables.add(item, submitButtonsOffset + i);
+       linkFormView.focusTracker.add(item.element);
+     });
+   }
+@@ -167,6 +171,10 @@ export default class EditorAdvancedLinkUi extends Plugin {
+           state[modelName] = linkFormView[modelName].fieldView.element.value;
+           return state;
+         }, {});
++        // Trick to collect a value for the "class" attribute.
++        if (this.bootstrapButtonEnabled) {
++          values['linkClass'] = this._addBootstrapButtonClasses(values);
++        }
+         // Stop the execution of the link command caused by closing the form.
+         // Inject the extra attribute value. The highest priority listener here
+         // injects the argument (here below ðŸ‘‡).
+@@ -192,4 +200,28 @@ export default class EditorAdvancedLinkUi extends Plugin {
+       { priority: 'high' },
+     );
+   }
++
++  _isBootstrapButtonsEnabled() {
++    const editorAdvancedLinkConfig = this.editor.config.get('editorAdvancedLink');
++    if (Object.hasOwn(editorAdvancedLinkConfig, 'options')) {
++      return Object.values(editorAdvancedLinkConfig.options).includes('bootstrap-button');
++    }
++    return false;
++  }
++
++  _addBootstrapButtonClasses(values) {
++    // Needs to remove previous classes first.
++    const allLinkClasses = values['linkClass'].split(' ');
++    let advLinkClasses = allLinkClasses.filter(function(val) {
++      return !val.match(/(?:btn)(-)?(\w+)?/g);
++    });
++    let classes =  advLinkClasses.join(' ');
++    let color = `btn-${values['buttonColor']}`;
++    let size = `btn-${values['buttonSize']}`;
++    // @todo: go away from the hardcoded value.
++    if (values['buttonStyle'].toLowerCase() === 'outline') {
++      color = `btn-${values['buttonStyle']}-${values['buttonColor']}`;
++    }
++    return (classes + ' btn ' + color + ' ' + size).toLowerCase();
++  }
+ }
+diff --git a/js/ckeditor5_plugins/editorAdvancedLink/src/utils.js b/js/ckeditor5_plugins/editorAdvancedLink/src/utils.js
+index 7ef4c19..61755e1 100644
+--- a/js/ckeditor5_plugins/editorAdvancedLink/src/utils.js
++++ b/js/ckeditor5_plugins/editorAdvancedLink/src/utils.js
+@@ -23,12 +23,30 @@ const additionalFormElements = {
+     viewAttribute: 'rel',
+     group: 'advanced',
+   },
++  buttonColor: {
++    label: Drupal.t('Color (i.e. primary, secondary, success etc.)'),
++    viewAttribute: 'data-button-color',
++    group: 'bootstrapButton',
++  },
++  buttonSize: {
++    label: Drupal.t('Size (sm, lg)'),
++    viewAttribute: 'data-button-size',
++    group: 'bootstrapButton',
++  },
++  buttonStyle: {
++    label: Drupal.t('Style (default, outline)'),
++    viewAttribute: 'data-button-style',
++    group: 'bootstrapButton',
++  },
+ };
+
+ const additionalFormGroups = {
+   advanced: {
+     label: Drupal.t('Advanced'),
+   },
++  bootstrapButton: {
++    label: Drupal.t('Bootstrap Button'),
++  },
+ };
+
+ export { additionalFormElements, additionalFormGroups };
+diff --git a/js/dist/bootstrap/bootstrap-buttons.css b/js/dist/bootstrap/bootstrap-buttons.css
+new file mode 100644
+index 0000000..f7d094e
+--- /dev/null
++++ b/js/dist/bootstrap/bootstrap-buttons.css
+@@ -0,0 +1,503 @@
++.btn {
++  --bs-btn-padding-x: 0.75rem;
++  --bs-btn-padding-y: 0.375rem;
++  --bs-btn-font-family: ;
++  --bs-btn-font-size: 1rem;
++  --bs-btn-font-weight: 400;
++  --bs-btn-line-height: 1.5;
++  --bs-btn-color: var(--bs-body-color);
++  --bs-btn-bg: transparent;
++  --bs-border-width: 1px;
++  --bs-border-style: solid;
++  --bs-border-color: #dee2e6;
++  --bs-border-color-translucent: rgba(0, 0, 0, 0.175);
++  --bs-border-radius: 0.375rem;
++  --bs-border-radius-sm: 0.25rem;
++  --bs-border-radius-lg: 0.5rem;
++  --bs-border-radius-xl: 1rem;
++  --bs-border-radius-xxl: 2rem;
++  --bs-border-radius-2xl: var(--bs-border-radius-xxl);
++  --bs-border-radius-pill: 50rem;
++  --bs-box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
++  --bs-box-shadow-sm: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
++  --bs-box-shadow-lg: 0 1rem 3rem rgba(0, 0, 0, 0.175);
++  --bs-box-shadow-inset: inset 0 1px 2px rgba(0, 0, 0, 0.075);
++  --bs-btn-border-width: var(--bs-border-width);
++  --bs-btn-border-color: transparent;
++  --bs-btn-border-radius: var(--bs-border-radius);
++  --bs-btn-hover-border-color: transparent;
++  --bs-btn-box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 1px 1px rgba(0, 0, 0, 0.075);
++  --bs-btn-disabled-opacity: 0.65;
++  --bs-btn-focus-box-shadow: 0 0 0 0.25rem rgba(var(--bs-btn-focus-shadow-rgb), .5);
++  display: inline-block;
++  padding: var(--bs-btn-padding-y) var(--bs-btn-padding-x);
++  font-family: var(--bs-btn-font-family);
++  font-size: var(--bs-btn-font-size);
++  font-weight: var(--bs-btn-font-weight);
++  line-height: var(--bs-btn-line-height);
++  color: var(--bs-btn-color);
++  text-align: center;
++  text-decoration: none;
++  vertical-align: middle;
++  cursor: pointer;
++  user-select: none;
++  border: var(--bs-btn-border-width) solid var(--bs-btn-border-color);
++  border-radius: var(--bs-btn-border-radius);
++  background-color: var(--bs-btn-bg);
++  transition: color 0.15s ease-in-out, background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
++}
++@media (prefers-reduced-motion: reduce) {
++  .btn {
++    transition: none;
++  }
++}
++.btn:hover {
++  color: var(--bs-btn-hover-color);
++  background-color: var(--bs-btn-hover-bg);
++  border-color: var(--bs-btn-hover-border-color);
++}
++.btn-check + .btn:hover {
++  color: var(--bs-btn-color);
++  background-color: var(--bs-btn-bg);
++  border-color: var(--bs-btn-border-color);
++}
++.btn:focus-visible {
++  color: var(--bs-btn-hover-color);
++  background-color: var(--bs-btn-hover-bg);
++  border-color: var(--bs-btn-hover-border-color);
++  outline: 0;
++  box-shadow: var(--bs-btn-focus-box-shadow);
++}
++.btn-check:focus-visible + .btn {
++  border-color: var(--bs-btn-hover-border-color);
++  outline: 0;
++  box-shadow: var(--bs-btn-focus-box-shadow);
++}
++.btn-check:checked + .btn, :not(.btn-check) + .btn:active, .btn:first-child:active, .btn.active, .btn.show {
++  color: var(--bs-btn-active-color);
++  background-color: var(--bs-btn-active-bg);
++  border-color: var(--bs-btn-active-border-color);
++}
++.btn-check:checked + .btn:focus-visible, :not(.btn-check) + .btn:active:focus-visible, .btn:first-child:active:focus-visible, .btn.active:focus-visible, .btn.show:focus-visible {
++  box-shadow: var(--bs-btn-focus-box-shadow);
++}
++.btn-check:checked:focus-visible + .btn {
++  box-shadow: var(--bs-btn-focus-box-shadow);
++}
++.btn:disabled, .btn.disabled, fieldset:disabled .btn {
++  color: var(--bs-btn-disabled-color);
++  pointer-events: none;
++  background-color: var(--bs-btn-disabled-bg);
++  border-color: var(--bs-btn-disabled-border-color);
++  opacity: var(--bs-btn-disabled-opacity);
++}
++
++.btn-primary {
++  --bs-btn-color: #fff;
++  --bs-btn-bg: #0d6efd;
++  --bs-btn-border-color: #0d6efd;
++  --bs-btn-hover-color: #fff;
++  --bs-btn-hover-bg: #0b5ed7;
++  --bs-btn-hover-border-color: #0a58ca;
++  --bs-btn-focus-shadow-rgb: 49, 132, 253;
++  --bs-btn-active-color: #fff;
++  --bs-btn-active-bg: #0a58ca;
++  --bs-btn-active-border-color: #0a53be;
++  --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
++  --bs-btn-disabled-color: #fff;
++  --bs-btn-disabled-bg: #0d6efd;
++  --bs-btn-disabled-border-color: #0d6efd;
++}
++
++.btn-secondary {
++  --bs-btn-color: #fff;
++  --bs-btn-bg: #6c757d;
++  --bs-btn-border-color: #6c757d;
++  --bs-btn-hover-color: #fff;
++  --bs-btn-hover-bg: #5c636a;
++  --bs-btn-hover-border-color: #565e64;
++  --bs-btn-focus-shadow-rgb: 130, 138, 145;
++  --bs-btn-active-color: #fff;
++  --bs-btn-active-bg: #565e64;
++  --bs-btn-active-border-color: #51585e;
++  --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
++  --bs-btn-disabled-color: #fff;
++  --bs-btn-disabled-bg: #6c757d;
++  --bs-btn-disabled-border-color: #6c757d;
++}
++
++.btn-success {
++  --bs-btn-color: #fff;
++  --bs-btn-bg: #198754;
++  --bs-btn-border-color: #198754;
++  --bs-btn-hover-color: #fff;
++  --bs-btn-hover-bg: #157347;
++  --bs-btn-hover-border-color: #146c43;
++  --bs-btn-focus-shadow-rgb: 60, 153, 110;
++  --bs-btn-active-color: #fff;
++  --bs-btn-active-bg: #146c43;
++  --bs-btn-active-border-color: #13653f;
++  --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
++  --bs-btn-disabled-color: #fff;
++  --bs-btn-disabled-bg: #198754;
++  --bs-btn-disabled-border-color: #198754;
++}
++
++.btn-info {
++  --bs-btn-color: #000;
++  --bs-btn-bg: #0dcaf0;
++  --bs-btn-border-color: #0dcaf0;
++  --bs-btn-hover-color: #000;
++  --bs-btn-hover-bg: #31d2f2;
++  --bs-btn-hover-border-color: #25cff2;
++  --bs-btn-focus-shadow-rgb: 11, 172, 204;
++  --bs-btn-active-color: #000;
++  --bs-btn-active-bg: #3dd5f3;
++  --bs-btn-active-border-color: #25cff2;
++  --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
++  --bs-btn-disabled-color: #000;
++  --bs-btn-disabled-bg: #0dcaf0;
++  --bs-btn-disabled-border-color: #0dcaf0;
++}
++
++.btn-warning {
++  --bs-btn-color: #000;
++  --bs-btn-bg: #ffc107;
++  --bs-btn-border-color: #ffc107;
++  --bs-btn-hover-color: #000;
++  --bs-btn-hover-bg: #ffca2c;
++  --bs-btn-hover-border-color: #ffc720;
++  --bs-btn-focus-shadow-rgb: 217, 164, 6;
++  --bs-btn-active-color: #000;
++  --bs-btn-active-bg: #ffcd39;
++  --bs-btn-active-border-color: #ffc720;
++  --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
++  --bs-btn-disabled-color: #000;
++  --bs-btn-disabled-bg: #ffc107;
++  --bs-btn-disabled-border-color: #ffc107;
++}
++
++.btn-danger {
++  --bs-btn-color: #fff;
++  --bs-btn-bg: #dc3545;
++  --bs-btn-border-color: #dc3545;
++  --bs-btn-hover-color: #fff;
++  --bs-btn-hover-bg: #bb2d3b;
++  --bs-btn-hover-border-color: #b02a37;
++  --bs-btn-focus-shadow-rgb: 225, 83, 97;
++  --bs-btn-active-color: #fff;
++  --bs-btn-active-bg: #b02a37;
++  --bs-btn-active-border-color: #a52834;
++  --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
++  --bs-btn-disabled-color: #fff;
++  --bs-btn-disabled-bg: #dc3545;
++  --bs-btn-disabled-border-color: #dc3545;
++}
++
++.btn-light {
++  --bs-btn-color: #000;
++  --bs-btn-bg: #f8f9fa;
++  --bs-btn-border-color: #f8f9fa;
++  --bs-btn-hover-color: #000;
++  --bs-btn-hover-bg: #d3d4d5;
++  --bs-btn-hover-border-color: #c6c7c8;
++  --bs-btn-focus-shadow-rgb: 211, 212, 213;
++  --bs-btn-active-color: #000;
++  --bs-btn-active-bg: #c6c7c8;
++  --bs-btn-active-border-color: #babbbc;
++  --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
++  --bs-btn-disabled-color: #000;
++  --bs-btn-disabled-bg: #f8f9fa;
++  --bs-btn-disabled-border-color: #f8f9fa;
++}
++
++.btn-dark {
++  --bs-btn-color: #fff;
++  --bs-btn-bg: #212529;
++  --bs-btn-border-color: #212529;
++  --bs-btn-hover-color: #fff;
++  --bs-btn-hover-bg: #424649;
++  --bs-btn-hover-border-color: #373b3e;
++  --bs-btn-focus-shadow-rgb: 66, 70, 73;
++  --bs-btn-active-color: #fff;
++  --bs-btn-active-bg: #4d5154;
++  --bs-btn-active-border-color: #373b3e;
++  --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
++  --bs-btn-disabled-color: #fff;
++  --bs-btn-disabled-bg: #212529;
++  --bs-btn-disabled-border-color: #212529;
++}
++
++.btn-outline-primary {
++  --bs-btn-color: #0d6efd;
++  --bs-btn-border-color: #0d6efd;
++  --bs-btn-hover-color: #fff;
++  --bs-btn-hover-bg: #0d6efd;
++  --bs-btn-hover-border-color: #0d6efd;
++  --bs-btn-focus-shadow-rgb: 13, 110, 253;
++  --bs-btn-active-color: #fff;
++  --bs-btn-active-bg: #0d6efd;
++  --bs-btn-active-border-color: #0d6efd;
++  --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
++  --bs-btn-disabled-color: #0d6efd;
++  --bs-btn-disabled-bg: transparent;
++  --bs-btn-disabled-border-color: #0d6efd;
++  --bs-gradient: none;
++}
++
++.btn-outline-secondary {
++  --bs-btn-color: #6c757d;
++  --bs-btn-border-color: #6c757d;
++  --bs-btn-hover-color: #fff;
++  --bs-btn-hover-bg: #6c757d;
++  --bs-btn-hover-border-color: #6c757d;
++  --bs-btn-focus-shadow-rgb: 108, 117, 125;
++  --bs-btn-active-color: #fff;
++  --bs-btn-active-bg: #6c757d;
++  --bs-btn-active-border-color: #6c757d;
++  --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
++  --bs-btn-disabled-color: #6c757d;
++  --bs-btn-disabled-bg: transparent;
++  --bs-btn-disabled-border-color: #6c757d;
++  --bs-gradient: none;
++}
++
++.btn-outline-success {
++  --bs-btn-color: #198754;
++  --bs-btn-border-color: #198754;
++  --bs-btn-hover-color: #fff;
++  --bs-btn-hover-bg: #198754;
++  --bs-btn-hover-border-color: #198754;
++  --bs-btn-focus-shadow-rgb: 25, 135, 84;
++  --bs-btn-active-color: #fff;
++  --bs-btn-active-bg: #198754;
++  --bs-btn-active-border-color: #198754;
++  --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
++  --bs-btn-disabled-color: #198754;
++  --bs-btn-disabled-bg: transparent;
++  --bs-btn-disabled-border-color: #198754;
++  --bs-gradient: none;
++}
++
++.btn-outline-info {
++  --bs-btn-color: #0dcaf0;
++  --bs-btn-border-color: #0dcaf0;
++  --bs-btn-hover-color: #000;
++  --bs-btn-hover-bg: #0dcaf0;
++  --bs-btn-hover-border-color: #0dcaf0;
++  --bs-btn-focus-shadow-rgb: 13, 202, 240;
++  --bs-btn-active-color: #000;
++  --bs-btn-active-bg: #0dcaf0;
++  --bs-btn-active-border-color: #0dcaf0;
++  --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
++  --bs-btn-disabled-color: #0dcaf0;
++  --bs-btn-disabled-bg: transparent;
++  --bs-btn-disabled-border-color: #0dcaf0;
++  --bs-gradient: none;
++}
++
++.btn-outline-warning {
++  --bs-btn-color: #ffc107;
++  --bs-btn-border-color: #ffc107;
++  --bs-btn-hover-color: #000;
++  --bs-btn-hover-bg: #ffc107;
++  --bs-btn-hover-border-color: #ffc107;
++  --bs-btn-focus-shadow-rgb: 255, 193, 7;
++  --bs-btn-active-color: #000;
++  --bs-btn-active-bg: #ffc107;
++  --bs-btn-active-border-color: #ffc107;
++  --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
++  --bs-btn-disabled-color: #ffc107;
++  --bs-btn-disabled-bg: transparent;
++  --bs-btn-disabled-border-color: #ffc107;
++  --bs-gradient: none;
++}
++
++.btn-outline-danger {
++  --bs-btn-color: #dc3545;
++  --bs-btn-border-color: #dc3545;
++  --bs-btn-hover-color: #fff;
++  --bs-btn-hover-bg: #dc3545;
++  --bs-btn-hover-border-color: #dc3545;
++  --bs-btn-focus-shadow-rgb: 220, 53, 69;
++  --bs-btn-active-color: #fff;
++  --bs-btn-active-bg: #dc3545;
++  --bs-btn-active-border-color: #dc3545;
++  --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
++  --bs-btn-disabled-color: #dc3545;
++  --bs-btn-disabled-bg: transparent;
++  --bs-btn-disabled-border-color: #dc3545;
++  --bs-gradient: none;
++}
++
++.btn-outline-light {
++  --bs-btn-color: #f8f9fa;
++  --bs-btn-border-color: #f8f9fa;
++  --bs-btn-hover-color: #000;
++  --bs-btn-hover-bg: #f8f9fa;
++  --bs-btn-hover-border-color: #f8f9fa;
++  --bs-btn-focus-shadow-rgb: 248, 249, 250;
++  --bs-btn-active-color: #000;
++  --bs-btn-active-bg: #f8f9fa;
++  --bs-btn-active-border-color: #f8f9fa;
++  --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
++  --bs-btn-disabled-color: #f8f9fa;
++  --bs-btn-disabled-bg: transparent;
++  --bs-btn-disabled-border-color: #f8f9fa;
++  --bs-gradient: none;
++}
++
++.btn-outline-dark {
++  --bs-btn-color: #212529;
++  --bs-btn-border-color: #212529;
++  --bs-btn-hover-color: #fff;
++  --bs-btn-hover-bg: #212529;
++  --bs-btn-hover-border-color: #212529;
++  --bs-btn-focus-shadow-rgb: 33, 37, 41;
++  --bs-btn-active-color: #fff;
++  --bs-btn-active-bg: #212529;
++  --bs-btn-active-border-color: #212529;
++  --bs-btn-active-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
++  --bs-btn-disabled-color: #212529;
++  --bs-btn-disabled-bg: transparent;
++  --bs-btn-disabled-border-color: #212529;
++  --bs-gradient: none;
++}
++
++.btn-link {
++  --bs-btn-font-weight: 400;
++  --bs-btn-color: var(--bs-link-color);
++  --bs-btn-bg: transparent;
++  --bs-btn-border-color: transparent;
++  --bs-btn-hover-color: var(--bs-link-hover-color);
++  --bs-btn-hover-border-color: transparent;
++  --bs-btn-active-color: var(--bs-link-hover-color);
++  --bs-btn-active-border-color: transparent;
++  --bs-btn-disabled-color: #6c757d;
++  --bs-btn-disabled-border-color: transparent;
++  --bs-btn-box-shadow: 0 0 0 #000;
++  --bs-btn-focus-shadow-rgb: 49, 132, 253;
++  text-decoration: underline;
++}
++.btn-link:focus-visible {
++  color: var(--bs-btn-color);
++}
++.btn-link:hover {
++  color: var(--bs-btn-hover-color);
++}
++
++.btn-lg, .btn-group-lg > .btn {
++  --bs-btn-padding-y: 0.5rem;
++  --bs-btn-padding-x: 1rem;
++  --bs-btn-font-size: 1.25rem;
++  --bs-btn-border-radius: var(--bs-border-radius-lg);
++}
++
++.btn-sm, .btn-group-sm > .btn {
++  --bs-btn-padding-y: 0.25rem;
++  --bs-btn-padding-x: 0.5rem;
++  --bs-btn-font-size: 0.875rem;
++  --bs-btn-border-radius: var(--bs-border-radius-sm);
++}
++
++.btn-group,
++.btn-group-vertical {
++  position: relative;
++  display: inline-flex;
++  vertical-align: middle;
++}
++.btn-group > .btn,
++.btn-group-vertical > .btn {
++  position: relative;
++  flex: 1 1 auto;
++}
++.btn-group > .btn-check:checked + .btn,
++.btn-group > .btn-check:focus + .btn,
++.btn-group > .btn:hover,
++.btn-group > .btn:focus,
++.btn-group > .btn:active,
++.btn-group > .btn.active,
++.btn-group-vertical > .btn-check:checked + .btn,
++.btn-group-vertical > .btn-check:focus + .btn,
++.btn-group-vertical > .btn:hover,
++.btn-group-vertical > .btn:focus,
++.btn-group-vertical > .btn:active,
++.btn-group-vertical > .btn.active {
++  z-index: 1;
++}
++
++.btn-toolbar {
++  display: flex;
++  flex-wrap: wrap;
++  justify-content: flex-start;
++}
++.btn-toolbar .input-group {
++  width: auto;
++}
++
++.btn-group {
++  border-radius: var(--bs-border-radius);
++}
++.btn-group > :not(.btn-check:first-child) + .btn,
++.btn-group > .btn-group:not(:first-child) {
++  margin-left: calc(var(--bs-border-width) * -1);
++}
++.btn-group > .btn:not(:last-child):not(.dropdown-toggle),
++.btn-group > .btn.dropdown-toggle-split:first-child,
++.btn-group > .btn-group:not(:last-child) > .btn {
++  border-top-right-radius: 0;
++  border-bottom-right-radius: 0;
++}
++.btn-group > .btn:nth-child(n+3),
++.btn-group > :not(.btn-check) + .btn,
++.btn-group > .btn-group:not(:first-child) > .btn {
++  border-top-left-radius: 0;
++  border-bottom-left-radius: 0;
++}
++
++.dropdown-toggle-split {
++  padding-right: 0.5625rem;
++  padding-left: 0.5625rem;
++}
++.dropdown-toggle-split::after, .dropup .dropdown-toggle-split::after, .dropend .dropdown-toggle-split::after {
++  margin-left: 0;
++}
++.dropstart .dropdown-toggle-split::before {
++  margin-right: 0;
++}
++
++.btn-sm + .dropdown-toggle-split, .btn-group-sm > .btn + .dropdown-toggle-split {
++  padding-right: 0.375rem;
++  padding-left: 0.375rem;
++}
++
++.btn-lg + .dropdown-toggle-split, .btn-group-lg > .btn + .dropdown-toggle-split {
++  padding-right: 0.75rem;
++  padding-left: 0.75rem;
++}
++
++.btn-group-vertical {
++  flex-direction: column;
++  align-items: flex-start;
++  justify-content: center;
++}
++.btn-group-vertical > .btn,
++.btn-group-vertical > .btn-group {
++  width: 100%;
++}
++.btn-group-vertical > .btn:not(:first-child),
++.btn-group-vertical > .btn-group:not(:first-child) {
++  margin-top: calc(var(--bs-border-width) * -1);
++}
++.btn-group-vertical > .btn:not(:last-child):not(.dropdown-toggle),
++.btn-group-vertical > .btn-group:not(:last-child) > .btn {
++  border-bottom-right-radius: 0;
++  border-bottom-left-radius: 0;
++}
++.btn-group-vertical > .btn ~ .btn,
++.btn-group-vertical > .btn-group:not(:first-child) > .btn {
++  border-top-left-radius: 0;
++  border-top-right-radius: 0;
++}
++
++/*# sourceMappingURL=bootstrap.css.map */
+diff --git a/src/Plugin/CKEditor5Plugin/AdvancedLink.php b/src/Plugin/CKEditor5Plugin/AdvancedLink.php
+index f2770bc..e74b3d4 100644
+--- a/src/Plugin/CKEditor5Plugin/AdvancedLink.php
++++ b/src/Plugin/CKEditor5Plugin/AdvancedLink.php
+@@ -39,6 +39,7 @@ class AdvancedLink extends CKEditor5PluginDefault implements CKEditor5PluginConf
+     'id' => TRUE,
+     'target' => ['_blank'],
+     'rel' => TRUE,
++    'bootstrap-button' => TRUE,
+   ];
+
+   /**
+@@ -90,6 +91,7 @@ class AdvancedLink extends CKEditor5PluginDefault implements CKEditor5PluginConf
+       'id' => $this->t('ID'),
+       'target' => $this->t('Open in new window'),
+       'rel' => $this->t('Link relationship'),
++      'bootstrap-button' => $this->t('Bootstrap Button'),
+     ];
+     assert(count(self::SUPPORTED_ATTRIBUTES) === count($config_ui_labels));
+
+@@ -145,7 +147,10 @@ class AdvancedLink extends CKEditor5PluginDefault implements CKEditor5PluginConf
+         ],
+       ];
+     }
+-
++    // Add attributes for Bootstrap Buttons option.
++    if (in_array('bootstrap-button', $enabled_attributes, TRUE)) {
++      array_push($enabled_attributes, 'data-button-color', 'data-button-size','data-button-style');
++    }
+     return $config + [
+       'editorAdvancedLink' => [
+         'options' => array_intersect($supported_attributes, $enabled_attributes),
+@@ -178,6 +183,10 @@ class AdvancedLink extends CKEditor5PluginDefault implements CKEditor5PluginConf
+       throw new \OutOfBoundsException();
+     }
+
++    if ($attribute === 'bootstrap-button') {
++      // For the Bootstrap Buttons attributes.
++      return sprintf('<a %s>', 'data-button-style data-button-color data-button-size');
++    }
+     $allowed_values = self::SUPPORTED_ATTRIBUTES[$attribute];
+     if ($allowed_values === TRUE) {
+       // For attributes for which any value can be created.
+--
+GitLab
+
+
+From 5e597804493f24b8289ebbd44ab5a2b46ec83074 Mon Sep 17 00:00:00 2001
+From: Alexey <alexey.drupal@gmail.com>
+Date: Wed, 28 Feb 2024 12:14:24 +0100
+Subject: [PATCH 2/2] #3423208: add a small improvement
+
+---
+ js/build/editorAdvancedLink.js                |  2 +-
+ .../src/editoradvancedlinkui.js               | 20 +++++++------------
+ 2 files changed, 8 insertions(+), 14 deletions(-)
+
+diff --git a/js/build/editorAdvancedLink.js b/js/build/editorAdvancedLink.js
+index 2ba9350..72f8c9a 100644
+--- a/js/build/editorAdvancedLink.js
++++ b/js/build/editorAdvancedLink.js
+@@ -1 +1 @@
+-!function(e,t){"object"==typeof exports&&"object"==typeof module?module.exports=t():"function"==typeof define&&define.amd?define([],t):"object"==typeof exports?exports.CKEditor5=t():(e.CKEditor5=e.CKEditor5||{},e.CKEditor5.editorAdvancedLink=t())}(self,(()=>(()=>{var e={"./node_modules/css-loader/dist/cjs.js!./node_modules/postcss-loader/dist/cjs.js??ruleSet[1].rules[0].use[2]!./js/ckeditor5_plugins/editorAdvancedLink/src/css/bbuttons.css":(e,t,s)=>{"use strict";s.d(t,{Z:()=>a});var o=s("./node_modules/css-loader/dist/runtime/noSourceMaps.js"),r=s.n(o),i=s("./node_modules/css-loader/dist/runtime/api.js"),n=s.n(i)()(r());n.push([e.id,".ck.ck-link-form.with-bootstrap-buttons{min-width:280px}",""]);const a=n},"./node_modules/css-loader/dist/cjs.js!./node_modules/postcss-loader/dist/cjs.js??ruleSet[1].rules[0].use[2]!./js/ckeditor5_plugins/editorAdvancedLink/src/details/details.css":(e,t,s)=>{"use strict";s.d(t,{Z:()=>a});var o=s("./node_modules/css-loader/dist/runtime/noSourceMaps.js"),r=s.n(o),i=s("./node_modules/css-loader/dist/runtime/api.js"),n=s.n(i)()(r());n.push([e.id,".ck.ck-form__details>summary{cursor:pointer}.ck.ck-form__details>summary:focus-visible{border:var(--ck-focus-ring);box-shadow:var(--ck-focus-outer-shadow),0 0}",""]);const a=n},"./node_modules/css-loader/dist/runtime/api.js":e=>{"use strict";e.exports=function(e){var t=[];return t.toString=function(){return this.map((function(t){var s="",o=void 0!==t[5];return t[4]&&(s+="@supports (".concat(t[4],") {")),t[2]&&(s+="@media ".concat(t[2]," {")),o&&(s+="@layer".concat(t[5].length>0?" ".concat(t[5]):""," {")),s+=e(t),o&&(s+="}"),t[2]&&(s+="}"),t[4]&&(s+="}"),s})).join("")},t.i=function(e,s,o,r,i){"string"==typeof e&&(e=[[null,e,void 0]]);var n={};if(o)for(var a=0;a<this.length;a++){var l=this[a][0];null!=l&&(n[l]=!0)}for(var d=0;d<e.length;d++){var c=[].concat(e[d]);o&&n[c[0]]||(void 0!==i&&(void 0===c[5]||(c[1]="@layer".concat(c[5].length>0?" ".concat(c[5]):""," {").concat(c[1],"}")),c[5]=i),s&&(c[2]?(c[1]="@media ".concat(c[2]," {").concat(c[1],"}"),c[2]=s):c[2]=s),r&&(c[4]?(c[1]="@supports (".concat(c[4],") {").concat(c[1],"}"),c[4]=r):c[4]="".concat(r)),t.push(c))}},t}},"./node_modules/css-loader/dist/runtime/noSourceMaps.js":e=>{"use strict";e.exports=function(e){return e[1]}},"./node_modules/style-loader/dist/runtime/injectStylesIntoStyleTag.js":(e,t,s)=>{"use strict";var o,r=function(){return void 0===o&&(o=Boolean(window&&document&&document.all&&!window.atob)),o},i=function(){var e={};return function(t){if(void 0===e[t]){var s=document.querySelector(t);if(window.HTMLIFrameElement&&s instanceof window.HTMLIFrameElement)try{s=s.contentDocument.head}catch(e){s=null}e[t]=s}return e[t]}}(),n=[];function a(e){for(var t=-1,s=0;s<n.length;s++)if(n[s].identifier===e){t=s;break}return t}function l(e,t){for(var s={},o=[],r=0;r<e.length;r++){var i=e[r],l=t.base?i[0]+t.base:i[0],d=s[l]||0,c="".concat(l," ").concat(d);s[l]=d+1;var u=a(c),m={css:i[1],media:i[2],sourceMap:i[3]};-1!==u?(n[u].references++,n[u].updater(m)):n.push({identifier:c,updater:f(m,t),references:1}),o.push(c)}return o}function d(e){var t=document.createElement("style"),o=e.attributes||{};if(void 0===o.nonce){var r=s.nc;r&&(o.nonce=r)}if(Object.keys(o).forEach((function(e){t.setAttribute(e,o[e])})),"function"==typeof e.insert)e.insert(t);else{var n=i(e.insert||"head");if(!n)throw new Error("Couldn't find a style target. This probably means that the value for the 'insert' parameter is invalid.");n.appendChild(t)}return t}var c,u=(c=[],function(e,t){return c[e]=t,c.filter(Boolean).join("\n")});function m(e,t,s,o){var r=s?"":o.media?"@media ".concat(o.media," {").concat(o.css,"}"):o.css;if(e.styleSheet)e.styleSheet.cssText=u(t,r);else{var i=document.createTextNode(r),n=e.childNodes;n[t]&&e.removeChild(n[t]),n.length?e.insertBefore(i,n[t]):e.appendChild(i)}}function p(e,t,s){var o=s.css,r=s.media,i=s.sourceMap;if(r?e.setAttribute("media",r):e.removeAttribute("media"),i&&"undefined"!=typeof btoa&&(o+="\n/*# sourceMappingURL=data:application/json;base64,".concat(btoa(unescape(encodeURIComponent(JSON.stringify(i))))," */")),e.styleSheet)e.styleSheet.cssText=o;else{for(;e.firstChild;)e.removeChild(e.firstChild);e.appendChild(document.createTextNode(o))}}var h=null,b=0;function f(e,t){var s,o,r;if(t.singleton){var i=b++;s=h||(h=d(t)),o=m.bind(null,s,i,!1),r=m.bind(null,s,i,!0)}else s=d(t),o=p.bind(null,s,t),r=function(){!function(e){if(null===e.parentNode)return!1;e.parentNode.removeChild(e)}(s)};return o(e),function(t){if(t){if(t.css===e.css&&t.media===e.media&&t.sourceMap===e.sourceMap)return;o(e=t)}else r()}}e.exports=function(e,t){(t=t||{}).singleton||"boolean"==typeof t.singleton||(t.singleton=r());var s=l(e=e||[],t);return function(e){if(e=e||[],"[object Array]"===Object.prototype.toString.call(e)){for(var o=0;o<s.length;o++){var r=a(s[o]);n[r].references--}for(var i=l(e,t),d=0;d<s.length;d++){var c=a(s[d]);0===n[c].references&&(n[c].updater(),n.splice(c,1))}s=i}}}},"ckeditor5/src/core.js":(e,t,s)=>{e.exports=s("dll-reference CKEditor5.dll")("./src/core.js")},"ckeditor5/src/typing.js":(e,t,s)=>{e.exports=s("dll-reference CKEditor5.dll")("./src/typing.js")},"ckeditor5/src/ui.js":(e,t,s)=>{e.exports=s("dll-reference CKEditor5.dll")("./src/ui.js")},"dll-reference CKEditor5.dll":e=>{"use strict";e.exports=CKEditor5.dll}},t={};function s(o){var r=t[o];if(void 0!==r)return r.exports;var i=t[o]={id:o,exports:{}};return e[o](i,i.exports,s),i.exports}s.n=e=>{var t=e&&e.__esModule?()=>e.default:()=>e;return s.d(t,{a:t}),t},s.d=(e,t)=>{for(var o in t)s.o(t,o)&&!s.o(e,o)&&Object.defineProperty(e,o,{enumerable:!0,get:t[o]})},s.o=(e,t)=>Object.prototype.hasOwnProperty.call(e,t),s.nc=void 0;var o={};return(()=>{"use strict";s.d(o,{default:()=>g});var e=s("ckeditor5/src/core.js"),t=s("ckeditor5/src/typing.js");const r={linkTitle:{label:Drupal.t("Title"),viewAttribute:"title"},linkAriaLabel:{label:Drupal.t("ARIA label"),viewAttribute:"aria-label",group:"advanced"},linkClass:{label:Drupal.t("CSS classes"),viewAttribute:"class",group:"advanced"},linkId:{label:Drupal.t("ID"),viewAttribute:"id",group:"advanced"},linkRel:{label:Drupal.t("Link relationship"),viewAttribute:"rel",group:"advanced"},buttonColor:{label:Drupal.t("Color (i.e. primary, secondary, success etc.)"),viewAttribute:"data-button-color",group:"bootstrapButton"},buttonSize:{label:Drupal.t("Size (sm, lg)"),viewAttribute:"data-button-size",group:"bootstrapButton"},buttonStyle:{label:Drupal.t("Style (default, outline)"),viewAttribute:"data-button-style",group:"bootstrapButton"}},i={advanced:{label:Drupal.t("Advanced")},bootstrapButton:{label:Drupal.t("Bootstrap Button")}};class n extends e.Plugin{static get pluginName(){return"EditorAdvancedLinkEditing"}init(){const e=this.editor.config.get("editorAdvancedLink");if(!e.options)return void(this.enabledModelNames=[]);const t=Object.values(e.options);this.enabledModelNames=Object.keys(r).filter((e=>t.includes(r[e].viewAttribute))),this.enabledModelNames.forEach((e=>{this._allowAndConvertExtraAttribute(e,r[e].viewAttribute),this._removeExtraAttributeOnUnlinkCommandExecute(e),this._refreshExtraAttributeValue(e)})),this._addExtraAttributeOnLinkCommandExecute(Object.keys(r))}_allowAndConvertExtraAttribute(e,t){const{editor:s}=this;s.model.schema.extend("$text",{allowAttributes:e}),s.conversion.for("downcast").attributeToElement({model:e,view:(e,{writer:s})=>{const o=s.createAttributeElement("a",{[t]:e},{priority:5});return s.setCustomProperty("link",!0,o),o}}),s.conversion.for("upcast").elementToAttribute({view:{name:"a",attributes:{[t]:!0}},model:{key:e,value:e=>e.getAttribute(t)}})}_addExtraAttributeOnLinkCommandExecute(e){const{editor:t}=this,s=t.commands.get("link");let o=!1;s.on("execute",((s,r)=>{if(r.length<3)return;if(o)return void(o=!1);s.stop(),o=!0;const i=r[r.length-1],{model:n}=this.editor,{selection:a}=n.document;n.change((s=>{t.execute("link",...r);const o=a.getFirstPosition();e.forEach((e=>{if(a.isCollapsed){const t=o.textNode||o.nodeBefore;i[e]?s.setAttribute(e,i[e],s.createRangeOn(t)):s.removeAttribute(e,s.createRangeOn(t)),s.removeSelectionAttribute(e)}else{const t=n.schema.getValidRanges(a.getRanges(),e);for(const o of t)i[e]?s.setAttribute(e,i[e],o):s.removeAttribute(e,o)}}))}))}),{priority:"high"})}_removeExtraAttributeOnUnlinkCommandExecute(e){const{editor:s}=this,o=s.commands.get("unlink"),{model:r}=this.editor,{selection:i}=r.document;let n=!1;o.on("execute",(o=>{n||(o.stop(),r.change((()=>{n=!0,s.execute("unlink"),n=!1,r.change((s=>{let o;o=i.isCollapsed?[(0,t.findAttributeRange)(i.getFirstPosition(),e,i.getAttribute(e),r)]:r.schema.getValidRanges(i.getRanges(),e);for(const t of o)s.removeAttribute(e,t)}))})))}),{priority:"high"})}_refreshExtraAttributeValue(e){const{editor:t}=this,s=t.commands.get("link"),{model:o}=this.editor,{selection:r}=o.document;s.set(e,null),o.document.on("change",(()=>{s[e]=r.getAttribute(e)}))}}var a=s("./node_modules/style-loader/dist/runtime/injectStylesIntoStyleTag.js"),l=s.n(a),d=s("./node_modules/css-loader/dist/cjs.js!./node_modules/postcss-loader/dist/cjs.js??ruleSet[1].rules[0].use[2]!./js/ckeditor5_plugins/editorAdvancedLink/src/css/bbuttons.css"),c={injectType:"singletonStyleTag",attributes:{"data-cke":!0},insert:"head",singleton:!0};l()(d.Z,c);d.Z.locals;var u=s("ckeditor5/src/ui.js"),m=s("./node_modules/css-loader/dist/cjs.js!./node_modules/postcss-loader/dist/cjs.js??ruleSet[1].rules[0].use[2]!./js/ckeditor5_plugins/editorAdvancedLink/src/details/details.css"),p={injectType:"singletonStyleTag",attributes:{"data-cke":!0},insert:"head",singleton:!0};l()(m.Z,p);m.Z.locals;class h extends u.View{constructor(e,t={}){super(e);const s=this.bindTemplate;this.set("isFocused",!1),this.set("label",t.label||""),this.set("class",t.class||null),this.children=this.createCollection(),this.setTemplate({tag:"details",attributes:{class:["ck","ck-form__details",s.if("isFocused","ck-form__details--focused"),s.to("class")]},children:this.children}),this.summary=new u.View(e),this.summary.setTemplate({tag:"summary",attributes:{class:["ck","ck-form__details__summary"]},children:[{text:s.to("label")}]}),this.children.add(this.summary)}render(){super.render(),this.element.addEventListener("toggle",this.onToggle.bind(this))}focus(){this.summary.element.focus()}onToggle(e){if(e.target.open){const e=this.parent._focusables.getIndex(this);Object.values(this.children._items).slice(1).reverse().forEach((t=>{this.parent._focusables.add(t,e+1),this.parent.focusTracker.add(t.element)}))}else Object.values(this.children._items).slice(1).forEach((e=>{this.parent._focusables.remove(e),this.parent.focusTracker.remove(e.element)}))}}class b extends e.Plugin{init(){this.groups={},this.bootstrapButtonEnabled=this._isBootstrapButtonsEnabled(),this.editor.plugins.get("LinkUI")._createViews&&this.editor.plugins.get("LinkUI")._createViews(),this._changeFormToVertical(),this._addExtraFormFields()}_addExtraFormFields(){const{editor:e}=this;e.plugins.get("ContextualBalloon").on("set:visibleView",((t,s,o,i)=>{const n=e.plugins.get("LinkUI").formView;if(o===i||o!==n)return;const{enabledModelNames:a}=e.plugins.get("EditorAdvancedLinkEditing");a.reverse().forEach((e=>{this._createExtraFormField(e,r[e])})),this._handleExtraFormFieldSubmit(a),this._addGroupsToFormView(),this._moveTargetDecoratorToAdvancedGroup()}))}_changeFormToVertical(){const e=this.editor.plugins.get("LinkUI").formView,t=this.bootstrapButtonEnabled?"with-bootstrap-buttons":"";e.extendTemplate({attributes:{class:["ck-vertical-form","ck-link-form_layout-vertical",t]}})}_createExtraFormField(e,t){const{editor:s}=this,{locale:o}=s,r=s.plugins.get("LinkUI").formView,i=s.commands.get("link");if(void 0===r[e]){const s=t.group?this._getGroup(t.group):r,n=new u.LabeledFieldView(o,u.createLabeledInputText);n.label=t.label,s.children.add(n,1),t.group||(r._focusables.add(n,1),r.focusTracker.add(n.element)),r[e]=n,r[e].fieldView.bind("value").to(i,e),r[e].fieldView.element.value=i[e]||""}}_addGroupsToFormView(){if(0===Object.entries(this.groups).length)return;const{editor:e}=this,t=e.plugins.get("LinkUI").formView;Object.values(this.groups).reverse().forEach((e=>{e.added||(t.children.add(e,2),e.parent=t,t._focusables.add(e,2),t.focusTracker.add(e.element),e.added=!0)}));const s=[t.children.find((e=>e.template.attributes.class.indexOf("ck-button-save")>-1)),t.children.find((e=>e.template.attributes.class.indexOf("ck-button-cancel")>-1))];let o=this.bootstrapButtonEnabled?4:3;s.forEach(((e,s)=>{t.children.remove(e),t._focusables.remove(e),t.focusTracker.remove(e.element),t.children.add(e,o+s),t._focusables.add(e,o+s),t.focusTracker.add(e.element)}))}_getGroup(e){if(!this.groups[e]){const{editor:t}=this,{locale:s}=t;this.groups[e]=new h(s,{label:i[e].label})}return this.groups[e]}_moveTargetDecoratorToAdvancedGroup(){const{editor:e}=this,t=e.plugins.get("LinkUI").formView;t.targetMoved||(t._manualDecoratorSwitches._items.forEach((e=>{e.label===Drupal.t("Open in new window")&&this._getGroup("advanced").children.add(e)})),t.targetMoved=!0)}_handleExtraFormFieldSubmit(e){const{editor:t}=this,s=t.plugins.get("LinkUI").formView,o=t.commands.get("link");this.listenTo(s,"submit",(()=>{const t=e.reduce(((e,t)=>(e[t]=s[t].fieldView.element.value,e)),{});this.bootstrapButtonEnabled&&(t.linkClass=this._addBootstrapButtonClasses(t)),o.once("execute",((e,s)=>{if(s.length<3)s.push(t);else{if(3!==s.length)throw Error("The link command has more than 3 arguments.");Object.assign(s[2],t)}}),{priority:"highest"})}),{priority:"high"})}_isBootstrapButtonsEnabled(){const e=this.editor.config.get("editorAdvancedLink");return!!Object.hasOwn(e,"options")&&Object.values(e.options).includes("bootstrap-button")}_addBootstrapButtonClasses(e){let t=e.linkClass.split(" ").filter((function(e){return!e.match(/(?:btn)(-)?(\w+)?/g)})).join(" "),s=`btn-${e.buttonColor}`,o=`btn-${e.buttonSize}`;return"outline"===e.buttonStyle.toLowerCase()&&(s=`btn-${e.buttonStyle}-${e.buttonColor}`),(t+" btn "+s+" "+o).toLowerCase()}}class f extends e.Plugin{static get requires(){return[n,b]}static get pluginName(){return"EditorAdvancedLink"}}const g={EditorAdvancedLink:f}})(),o=o.default})()));
+\ No newline at end of file
++!function(e,t){"object"==typeof exports&&"object"==typeof module?module.exports=t():"function"==typeof define&&define.amd?define([],t):"object"==typeof exports?exports.CKEditor5=t():(e.CKEditor5=e.CKEditor5||{},e.CKEditor5.editorAdvancedLink=t())}(self,(()=>(()=>{var e={"./node_modules/css-loader/dist/cjs.js!./node_modules/postcss-loader/dist/cjs.js??ruleSet[1].rules[0].use[2]!./js/ckeditor5_plugins/editorAdvancedLink/src/css/bbuttons.css":(e,t,s)=>{"use strict";s.d(t,{Z:()=>a});var o=s("./node_modules/css-loader/dist/runtime/noSourceMaps.js"),r=s.n(o),i=s("./node_modules/css-loader/dist/runtime/api.js"),n=s.n(i)()(r());n.push([e.id,".ck.ck-link-form.with-bootstrap-buttons{min-width:280px}",""]);const a=n},"./node_modules/css-loader/dist/cjs.js!./node_modules/postcss-loader/dist/cjs.js??ruleSet[1].rules[0].use[2]!./js/ckeditor5_plugins/editorAdvancedLink/src/details/details.css":(e,t,s)=>{"use strict";s.d(t,{Z:()=>a});var o=s("./node_modules/css-loader/dist/runtime/noSourceMaps.js"),r=s.n(o),i=s("./node_modules/css-loader/dist/runtime/api.js"),n=s.n(i)()(r());n.push([e.id,".ck.ck-form__details>summary{cursor:pointer}.ck.ck-form__details>summary:focus-visible{border:var(--ck-focus-ring);box-shadow:var(--ck-focus-outer-shadow),0 0}",""]);const a=n},"./node_modules/css-loader/dist/runtime/api.js":e=>{"use strict";e.exports=function(e){var t=[];return t.toString=function(){return this.map((function(t){var s="",o=void 0!==t[5];return t[4]&&(s+="@supports (".concat(t[4],") {")),t[2]&&(s+="@media ".concat(t[2]," {")),o&&(s+="@layer".concat(t[5].length>0?" ".concat(t[5]):""," {")),s+=e(t),o&&(s+="}"),t[2]&&(s+="}"),t[4]&&(s+="}"),s})).join("")},t.i=function(e,s,o,r,i){"string"==typeof e&&(e=[[null,e,void 0]]);var n={};if(o)for(var a=0;a<this.length;a++){var l=this[a][0];null!=l&&(n[l]=!0)}for(var d=0;d<e.length;d++){var c=[].concat(e[d]);o&&n[c[0]]||(void 0!==i&&(void 0===c[5]||(c[1]="@layer".concat(c[5].length>0?" ".concat(c[5]):""," {").concat(c[1],"}")),c[5]=i),s&&(c[2]?(c[1]="@media ".concat(c[2]," {").concat(c[1],"}"),c[2]=s):c[2]=s),r&&(c[4]?(c[1]="@supports (".concat(c[4],") {").concat(c[1],"}"),c[4]=r):c[4]="".concat(r)),t.push(c))}},t}},"./node_modules/css-loader/dist/runtime/noSourceMaps.js":e=>{"use strict";e.exports=function(e){return e[1]}},"./node_modules/style-loader/dist/runtime/injectStylesIntoStyleTag.js":(e,t,s)=>{"use strict";var o,r=function(){return void 0===o&&(o=Boolean(window&&document&&document.all&&!window.atob)),o},i=function(){var e={};return function(t){if(void 0===e[t]){var s=document.querySelector(t);if(window.HTMLIFrameElement&&s instanceof window.HTMLIFrameElement)try{s=s.contentDocument.head}catch(e){s=null}e[t]=s}return e[t]}}(),n=[];function a(e){for(var t=-1,s=0;s<n.length;s++)if(n[s].identifier===e){t=s;break}return t}function l(e,t){for(var s={},o=[],r=0;r<e.length;r++){var i=e[r],l=t.base?i[0]+t.base:i[0],d=s[l]||0,c="".concat(l," ").concat(d);s[l]=d+1;var u=a(c),m={css:i[1],media:i[2],sourceMap:i[3]};-1!==u?(n[u].references++,n[u].updater(m)):n.push({identifier:c,updater:f(m,t),references:1}),o.push(c)}return o}function d(e){var t=document.createElement("style"),o=e.attributes||{};if(void 0===o.nonce){var r=s.nc;r&&(o.nonce=r)}if(Object.keys(o).forEach((function(e){t.setAttribute(e,o[e])})),"function"==typeof e.insert)e.insert(t);else{var n=i(e.insert||"head");if(!n)throw new Error("Couldn't find a style target. This probably means that the value for the 'insert' parameter is invalid.");n.appendChild(t)}return t}var c,u=(c=[],function(e,t){return c[e]=t,c.filter(Boolean).join("\n")});function m(e,t,s,o){var r=s?"":o.media?"@media ".concat(o.media," {").concat(o.css,"}"):o.css;if(e.styleSheet)e.styleSheet.cssText=u(t,r);else{var i=document.createTextNode(r),n=e.childNodes;n[t]&&e.removeChild(n[t]),n.length?e.insertBefore(i,n[t]):e.appendChild(i)}}function p(e,t,s){var o=s.css,r=s.media,i=s.sourceMap;if(r?e.setAttribute("media",r):e.removeAttribute("media"),i&&"undefined"!=typeof btoa&&(o+="\n/*# sourceMappingURL=data:application/json;base64,".concat(btoa(unescape(encodeURIComponent(JSON.stringify(i))))," */")),e.styleSheet)e.styleSheet.cssText=o;else{for(;e.firstChild;)e.removeChild(e.firstChild);e.appendChild(document.createTextNode(o))}}var h=null,b=0;function f(e,t){var s,o,r;if(t.singleton){var i=b++;s=h||(h=d(t)),o=m.bind(null,s,i,!1),r=m.bind(null,s,i,!0)}else s=d(t),o=p.bind(null,s,t),r=function(){!function(e){if(null===e.parentNode)return!1;e.parentNode.removeChild(e)}(s)};return o(e),function(t){if(t){if(t.css===e.css&&t.media===e.media&&t.sourceMap===e.sourceMap)return;o(e=t)}else r()}}e.exports=function(e,t){(t=t||{}).singleton||"boolean"==typeof t.singleton||(t.singleton=r());var s=l(e=e||[],t);return function(e){if(e=e||[],"[object Array]"===Object.prototype.toString.call(e)){for(var o=0;o<s.length;o++){var r=a(s[o]);n[r].references--}for(var i=l(e,t),d=0;d<s.length;d++){var c=a(s[d]);0===n[c].references&&(n[c].updater(),n.splice(c,1))}s=i}}}},"ckeditor5/src/core.js":(e,t,s)=>{e.exports=s("dll-reference CKEditor5.dll")("./src/core.js")},"ckeditor5/src/typing.js":(e,t,s)=>{e.exports=s("dll-reference CKEditor5.dll")("./src/typing.js")},"ckeditor5/src/ui.js":(e,t,s)=>{e.exports=s("dll-reference CKEditor5.dll")("./src/ui.js")},"dll-reference CKEditor5.dll":e=>{"use strict";e.exports=CKEditor5.dll}},t={};function s(o){var r=t[o];if(void 0!==r)return r.exports;var i=t[o]={id:o,exports:{}};return e[o](i,i.exports,s),i.exports}s.n=e=>{var t=e&&e.__esModule?()=>e.default:()=>e;return s.d(t,{a:t}),t},s.d=(e,t)=>{for(var o in t)s.o(t,o)&&!s.o(e,o)&&Object.defineProperty(e,o,{enumerable:!0,get:t[o]})},s.o=(e,t)=>Object.prototype.hasOwnProperty.call(e,t),s.nc=void 0;var o={};return(()=>{"use strict";s.d(o,{default:()=>g});var e=s("ckeditor5/src/core.js"),t=s("ckeditor5/src/typing.js");const r={linkTitle:{label:Drupal.t("Title"),viewAttribute:"title"},linkAriaLabel:{label:Drupal.t("ARIA label"),viewAttribute:"aria-label",group:"advanced"},linkClass:{label:Drupal.t("CSS classes"),viewAttribute:"class",group:"advanced"},linkId:{label:Drupal.t("ID"),viewAttribute:"id",group:"advanced"},linkRel:{label:Drupal.t("Link relationship"),viewAttribute:"rel",group:"advanced"},buttonColor:{label:Drupal.t("Color (i.e. primary, secondary, success etc.)"),viewAttribute:"data-button-color",group:"bootstrapButton"},buttonSize:{label:Drupal.t("Size (sm, lg)"),viewAttribute:"data-button-size",group:"bootstrapButton"},buttonStyle:{label:Drupal.t("Style (default, outline)"),viewAttribute:"data-button-style",group:"bootstrapButton"}},i={advanced:{label:Drupal.t("Advanced")},bootstrapButton:{label:Drupal.t("Bootstrap Button")}};class n extends e.Plugin{static get pluginName(){return"EditorAdvancedLinkEditing"}init(){const e=this.editor.config.get("editorAdvancedLink");if(!e.options)return void(this.enabledModelNames=[]);const t=Object.values(e.options);this.enabledModelNames=Object.keys(r).filter((e=>t.includes(r[e].viewAttribute))),this.enabledModelNames.forEach((e=>{this._allowAndConvertExtraAttribute(e,r[e].viewAttribute),this._removeExtraAttributeOnUnlinkCommandExecute(e),this._refreshExtraAttributeValue(e)})),this._addExtraAttributeOnLinkCommandExecute(Object.keys(r))}_allowAndConvertExtraAttribute(e,t){const{editor:s}=this;s.model.schema.extend("$text",{allowAttributes:e}),s.conversion.for("downcast").attributeToElement({model:e,view:(e,{writer:s})=>{const o=s.createAttributeElement("a",{[t]:e},{priority:5});return s.setCustomProperty("link",!0,o),o}}),s.conversion.for("upcast").elementToAttribute({view:{name:"a",attributes:{[t]:!0}},model:{key:e,value:e=>e.getAttribute(t)}})}_addExtraAttributeOnLinkCommandExecute(e){const{editor:t}=this,s=t.commands.get("link");let o=!1;s.on("execute",((s,r)=>{if(r.length<3)return;if(o)return void(o=!1);s.stop(),o=!0;const i=r[r.length-1],{model:n}=this.editor,{selection:a}=n.document;n.change((s=>{t.execute("link",...r);const o=a.getFirstPosition();e.forEach((e=>{if(a.isCollapsed){const t=o.textNode||o.nodeBefore;i[e]?s.setAttribute(e,i[e],s.createRangeOn(t)):s.removeAttribute(e,s.createRangeOn(t)),s.removeSelectionAttribute(e)}else{const t=n.schema.getValidRanges(a.getRanges(),e);for(const o of t)i[e]?s.setAttribute(e,i[e],o):s.removeAttribute(e,o)}}))}))}),{priority:"high"})}_removeExtraAttributeOnUnlinkCommandExecute(e){const{editor:s}=this,o=s.commands.get("unlink"),{model:r}=this.editor,{selection:i}=r.document;let n=!1;o.on("execute",(o=>{n||(o.stop(),r.change((()=>{n=!0,s.execute("unlink"),n=!1,r.change((s=>{let o;o=i.isCollapsed?[(0,t.findAttributeRange)(i.getFirstPosition(),e,i.getAttribute(e),r)]:r.schema.getValidRanges(i.getRanges(),e);for(const t of o)s.removeAttribute(e,t)}))})))}),{priority:"high"})}_refreshExtraAttributeValue(e){const{editor:t}=this,s=t.commands.get("link"),{model:o}=this.editor,{selection:r}=o.document;s.set(e,null),o.document.on("change",(()=>{s[e]=r.getAttribute(e)}))}}var a=s("./node_modules/style-loader/dist/runtime/injectStylesIntoStyleTag.js"),l=s.n(a),d=s("./node_modules/css-loader/dist/cjs.js!./node_modules/postcss-loader/dist/cjs.js??ruleSet[1].rules[0].use[2]!./js/ckeditor5_plugins/editorAdvancedLink/src/css/bbuttons.css"),c={injectType:"singletonStyleTag",attributes:{"data-cke":!0},insert:"head",singleton:!0};l()(d.Z,c);d.Z.locals;var u=s("ckeditor5/src/ui.js"),m=s("./node_modules/css-loader/dist/cjs.js!./node_modules/postcss-loader/dist/cjs.js??ruleSet[1].rules[0].use[2]!./js/ckeditor5_plugins/editorAdvancedLink/src/details/details.css"),p={injectType:"singletonStyleTag",attributes:{"data-cke":!0},insert:"head",singleton:!0};l()(m.Z,p);m.Z.locals;class h extends u.View{constructor(e,t={}){super(e);const s=this.bindTemplate;this.set("isFocused",!1),this.set("label",t.label||""),this.set("class",t.class||null),this.children=this.createCollection(),this.setTemplate({tag:"details",attributes:{class:["ck","ck-form__details",s.if("isFocused","ck-form__details--focused"),s.to("class")]},children:this.children}),this.summary=new u.View(e),this.summary.setTemplate({tag:"summary",attributes:{class:["ck","ck-form__details__summary"]},children:[{text:s.to("label")}]}),this.children.add(this.summary)}render(){super.render(),this.element.addEventListener("toggle",this.onToggle.bind(this))}focus(){this.summary.element.focus()}onToggle(e){if(e.target.open){const e=this.parent._focusables.getIndex(this);Object.values(this.children._items).slice(1).reverse().forEach((t=>{this.parent._focusables.add(t,e+1),this.parent.focusTracker.add(t.element)}))}else Object.values(this.children._items).slice(1).forEach((e=>{this.parent._focusables.remove(e),this.parent.focusTracker.remove(e.element)}))}}class b extends e.Plugin{init(){this.groups={},this.bootstrapButtonEnabled=this._isBootstrapButtonsEnabled(),this.editor.plugins.get("LinkUI")._createViews&&this.editor.plugins.get("LinkUI")._createViews(),this._changeFormToVertical(),this._addExtraFormFields()}_addExtraFormFields(){const{editor:e}=this;e.plugins.get("ContextualBalloon").on("set:visibleView",((t,s,o,i)=>{const n=e.plugins.get("LinkUI").formView;if(o===i||o!==n)return;const{enabledModelNames:a}=e.plugins.get("EditorAdvancedLinkEditing");a.reverse().forEach((e=>{this._createExtraFormField(e,r[e])})),this._handleExtraFormFieldSubmit(a),this._addGroupsToFormView(),this._moveTargetDecoratorToAdvancedGroup()}))}_changeFormToVertical(){const e=this.editor.plugins.get("LinkUI").formView,t=this.bootstrapButtonEnabled?"with-bootstrap-buttons":"";e.extendTemplate({attributes:{class:["ck-vertical-form","ck-link-form_layout-vertical",t]}})}_createExtraFormField(e,t){const{editor:s}=this,{locale:o}=s,r=s.plugins.get("LinkUI").formView,i=s.commands.get("link");if(void 0===r[e]){const s=t.group?this._getGroup(t.group):r,n=new u.LabeledFieldView(o,u.createLabeledInputText);n.label=t.label,s.children.add(n,1),t.group||(r._focusables.add(n,1),r.focusTracker.add(n.element)),r[e]=n,r[e].fieldView.bind("value").to(i,e),r[e].fieldView.element.value=i[e]||""}}_addGroupsToFormView(){if(0===Object.entries(this.groups).length)return;const{editor:e}=this,t=e.plugins.get("LinkUI").formView;Object.values(this.groups).reverse().forEach((e=>{e.added||(t.children.add(e,2),e.parent=t,t._focusables.add(e,2),t.focusTracker.add(e.element),e.added=!0)}));const s=[t.children.find((e=>e.template.attributes.class.indexOf("ck-button-save")>-1)),t.children.find((e=>e.template.attributes.class.indexOf("ck-button-cancel")>-1))];let o=this.bootstrapButtonEnabled?4:3;s.forEach(((e,s)=>{t.children.remove(e),t._focusables.remove(e),t.focusTracker.remove(e.element),t.children.add(e,o+s),t._focusables.add(e,o+s),t.focusTracker.add(e.element)}))}_getGroup(e){if(!this.groups[e]){const{editor:t}=this,{locale:s}=t;this.groups[e]=new h(s,{label:i[e].label})}return this.groups[e]}_moveTargetDecoratorToAdvancedGroup(){const{editor:e}=this,t=e.plugins.get("LinkUI").formView;t.targetMoved||(t._manualDecoratorSwitches._items.forEach((e=>{e.label===Drupal.t("Open in new window")&&this._getGroup("advanced").children.add(e)})),t.targetMoved=!0)}_handleExtraFormFieldSubmit(e){const{editor:t}=this,s=t.plugins.get("LinkUI").formView,o=t.commands.get("link");this.listenTo(s,"submit",(()=>{const t=e.reduce(((e,t)=>(e[t]=s[t].fieldView.element.value,e)),{});this.bootstrapButtonEnabled&&(t.linkClass=this._addBootstrapButtonClasses(t)),o.once("execute",((e,s)=>{if(s.length<3)s.push(t);else{if(3!==s.length)throw Error("The link command has more than 3 arguments.");Object.assign(s[2],t)}}),{priority:"highest"})}),{priority:"high"})}_isBootstrapButtonsEnabled(){const e=this.editor.config.get("editorAdvancedLink");return!!Object.hasOwn(e,"options")&&Object.values(e.options).includes("bootstrap-button")}_addBootstrapButtonClasses(e){return[...e.linkClass.split(" ").filter((e=>!e.match(/btn(-\w+)?/))),"btn",`btn-${"outline"===e.buttonStyle.toLowerCase()?`outline-${e.buttonColor}`:e.buttonColor}`,`btn-${e.buttonSize}`].join(" ").toLowerCase()}}class f extends e.Plugin{static get requires(){return[n,b]}static get pluginName(){return"EditorAdvancedLink"}}const g={EditorAdvancedLink:f}})(),o=o.default})()));
+\ No newline at end of file
+diff --git a/js/ckeditor5_plugins/editorAdvancedLink/src/editoradvancedlinkui.js b/js/ckeditor5_plugins/editorAdvancedLink/src/editoradvancedlinkui.js
+index f896389..d11aa26 100644
+--- a/js/ckeditor5_plugins/editorAdvancedLink/src/editoradvancedlinkui.js
++++ b/js/ckeditor5_plugins/editorAdvancedLink/src/editoradvancedlinkui.js
+@@ -210,18 +210,12 @@ export default class EditorAdvancedLinkUi extends Plugin {
+   }
+
+   _addBootstrapButtonClasses(values) {
+-    // Needs to remove previous classes first.
+-    const allLinkClasses = values['linkClass'].split(' ');
+-    let advLinkClasses = allLinkClasses.filter(function(val) {
+-      return !val.match(/(?:btn)(-)?(\w+)?/g);
+-    });
+-    let classes =  advLinkClasses.join(' ');
+-    let color = `btn-${values['buttonColor']}`;
+-    let size = `btn-${values['buttonSize']}`;
+-    // @todo: go away from the hardcoded value.
+-    if (values['buttonStyle'].toLowerCase() === 'outline') {
+-      color = `btn-${values['buttonStyle']}-${values['buttonColor']}`;
+-    }
+-    return (classes + ' btn ' + color + ' ' + size).toLowerCase();
++    // Filter out classes that do not belong to Bootstrap buttons.
++    const advLinkClasses = values['linkClass'].split(' ').filter(val => !val.match(/btn(-\w+)?/));
++    // Define the base classes for the button.
++    let colorClass = `btn-${values['buttonStyle'].toLowerCase() === 'outline' ? `outline-${values['buttonColor']}` : values['buttonColor']}`;
++    let sizeClass = `btn-${values['buttonSize']}`;
++    // Concatenate all classes together, using a space as a separator, and convert the result to lowercase.
++    return [...advLinkClasses, 'btn', colorClass, sizeClass].join(' ').toLowerCase();
+   }
+ }
+--
+GitLab
