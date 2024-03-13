@@ -155,7 +155,8 @@
     "require-dev": {
         "consolidation/robo": "^1.1.5 || ^2 || ^3 || ^4",
         "drush/drush": "^10.5.0 || ^11 || ^12",
-        "open-y-subprojects/openy_docs": "dev-main"
+        "open-y-subprojects/openy_docs": "dev-main",
+        "ycloudyusa/yusaopeny_memberships": "dev-updateComposerDependencies"
     },
     "replace": {
         "ymcatwincities/openy": "*"
@@ -274,6 +275,10 @@
                     "url": "https://github.com/vakata/jstree/archive/3.3.8.zip"
                 }
             }
+        },
+        {
+          "type": "vcs",
+          "url": "https://github.com/aleevas/yusaopeny_memberships"
         }
     ],
     "minimum-stability": "dev",
